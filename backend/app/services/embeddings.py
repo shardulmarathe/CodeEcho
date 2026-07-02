@@ -61,13 +61,13 @@ def _embed_google(texts: list[str]) -> list[list[float]]:
                     params={"key": settings.embedding_api_key},
                     json=payload,
                 )
-                if resp.status_code == 429 and attempt < 5:
+                if resp.status_code in (429, 503) and attempt < 5:
                     time.sleep(min(2**attempt, 30))
                     continue
                 resp.raise_for_status()
                 break
             out.append([float(x) for x in resp.json()["embedding"]["values"]])
-            time.sleep(0.15)
+            time.sleep(0.25)
     # Rough token estimate for the ledger (~1.3 tokens/word).
     tokens = sum(int(len(t.split()) * 1.3) for t in texts)
     try:
