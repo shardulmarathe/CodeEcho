@@ -13,9 +13,11 @@ import type {
 } from "./types";
 import { getAuthToken, getGuestToken } from "./identity";
 
-// In production, leave NEXT_PUBLIC_API_URL unset so the browser uses same-origin
-// /api/* requests (proxied to the backend in next.config.ts).
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Production: same-origin /api/* (proxied to Render in next.config.ts).
+// Development: local FastAPI on :8000.
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers);
@@ -29,7 +31,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     res = await fetch(`${API_URL}${path}`, { ...options, headers });
   } catch {
     throw new Error(
-      `Cannot reach the backend at ${API_URL}. Start it with: cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000`
+      API_URL
+        ? `Cannot reach the backend at ${API_URL}. Is the server running?`
+        : "Cannot reach the server. Please try again in a moment."
     );
   }
   if (!res.ok) {
