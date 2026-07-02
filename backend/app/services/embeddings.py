@@ -3,7 +3,7 @@
 The Stanford LLM gateway exposes no embedding model, so embeddings do NOT route through
 `llm_client`. Two backends:
   - **local** (default): fastembed `BAAI/bge-base-en-v1.5`, 768-dim, offline, free.
-  - **google**: Gemini `text-embedding-004` via `:embedContent`, used only when
+  - **google**: Gemini `gemini-embedding-001` via `:embedContent`, used only when
     `settings.embedding_api_key` (a Google AIza key) is set.
 
 Both are 768-dim to match `kb_documents.embedding`. Ingest and query MUST use the same
@@ -12,6 +12,7 @@ mismatch is detectable. Local cost is $0; the Google path is budget-tracked.
 """
 
 import threading
+import time
 from typing import Optional
 
 import httpx
@@ -48,13 +49,25 @@ def _embed_google(texts: list[str]) -> list[list[float]]:
     out: list[list[float]] = []
     with httpx.Client(timeout=60.0) as client:
         for text in texts:
-            resp = client.post(
-                url,
-                params={"key": settings.embedding_api_key},
-                json={"model": f"models/{model}", "content": {"parts": [{"text": text}]}},
-            )
-            resp.raise_for_status()
+            payload: dict = {
+                "model": f"models/{model}",
+                "content": {"parts": [{"text": text}]},
+            }
+            if settings.embedding_dimension:
+                payload["outputDimensionality"] = settings.embedding_dimension
+            for attempt in range(6):
+                resp = client.post(
+                    url,
+                    params={"key": settings.embedding_api_key},
+                    json=payload,
+                )
+                if resp.status_code == 429 and attempt < 5:
+                    time.sleep(min(2**attempt, 30))
+                    continue
+                resp.raise_for_status()
+                break
             out.append([float(x) for x in resp.json()["embedding"]["values"]])
+            time.sleep(0.15)
     # Rough token estimate for the ledger (~1.3 tokens/word).
     tokens = sum(int(len(t.split()) * 1.3) for t in texts)
     try:

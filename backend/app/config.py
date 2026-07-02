@@ -79,9 +79,9 @@ class Settings(BaseSettings):
     # --- RAG / embeddings ---
     # The Stanford gateway exposes no embedding model, so by default we embed locally
     # (offline, free) via fastembed. Set embedding_api_key to a Google AIza key to use
-    # Gemini text-embedding-004 instead. Both are 768-dim to match kb_documents.embedding.
+    # Gemini gemini-embedding-001 instead. Both are 768-dim to match kb_documents.embedding.
     embedding_local_model: str = "BAAI/bge-base-en-v1.5"  # 768-dim, ONNX, offline
-    embedding_model: str = "text-embedding-004"  # used only with a Google-direct key
+    embedding_model: str = "gemini-embedding-001"  # used only with a Google-direct key
     embedding_api_key: str = ""  # Google AIza key; blank => local embeddings
     embedding_base_url: str = "https://generativelanguage.googleapis.com"
     embedding_dimension: int = 768

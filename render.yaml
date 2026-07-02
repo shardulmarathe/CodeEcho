@@ -34,12 +34,12 @@ services:
         value: "false"
       # Free tier is 512MB RAM. Local ONNX models OOM the process during scoring.
       # LLM scorecards still work; RAG coaching blocks are skipped until you add
-      # EMBEDDING_API_KEY (Google) or upgrade RAM.
+      # EMBEDDING_API_KEY set in dashboard — Google gemini-embedding-001 (768-dim, no local ONNX).
       - key: RAG_ENABLED
-        value: "false"
+        value: "true"
       - key: RERANK_ENABLED
         value: "false"
-      # Optional: set EMBEDDING_API_KEY (Google AIza) to avoid loading the local
-      # fastembed model (~300MB). Vectors stay 768-dim (text-embedding-004).
+      # Optional: set EMBEDDING_API_KEY (Google) to avoid loading the local
+      # fastembed model (~300MB). Vectors stay 768-dim (gemini-embedding-001).
       - key: EMBEDDING_API_KEY
         sync: false
