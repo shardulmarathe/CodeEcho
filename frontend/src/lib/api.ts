@@ -13,7 +13,9 @@ import type {
 } from "./types";
 import { getAuthToken, getGuestToken } from "./identity";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// In production, leave NEXT_PUBLIC_API_URL unset so the browser uses same-origin
+// /api/* requests (proxied to the backend in next.config.ts).
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers);
