@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
 
     # Model for audio transcription
-    gemini_transcription_model: str = "gemini-2.5-flash"
+    gemini_transcription_model: str = "gemini-2.5-pro"
 
     @property
     def effective_transcription_model(self) -> str:

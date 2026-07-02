@@ -17,7 +17,7 @@ services:
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: GEMINI_TRANSCRIPTION_MODEL
-        value: gemini-2.5-flash
+        value: gemini-2.5-pro
       - key: API_BUDGET_CAP_USD
         value: "3.0"
       - key: SUPABASE_URL
