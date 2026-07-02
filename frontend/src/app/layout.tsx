@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Space_Grotesk, JetBrains_Mono, Kalam, Patrick_Hand } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Analytics } from "@vercel/analytics/next";
 import { AuthBridge } from "@/components/auth/AuthControls";
 import "./globals.css";
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
         {clerkEnabled && <AuthBridge />}
+        <Analytics />
       </body>
     </html>
   );
