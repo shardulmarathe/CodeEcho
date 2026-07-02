@@ -34,12 +34,19 @@ services:
         value: "false"
       # Free tier is 512MB RAM. Local ONNX models OOM the process during scoring.
       # LLM scorecards still work; RAG coaching blocks are skipped until you add
-      # EMBEDDING_API_KEY set in dashboard — Google gemini-embedding-001 (768-dim, no local ONNX).
+      # Cloud embeddings (Azure or Google) avoid loading local ONNX (~300MB) on free tier.
       - key: RAG_ENABLED
         value: "true"
       - key: RERANK_ENABLED
         value: "false"
-      # Optional: set EMBEDDING_API_KEY (Google) to avoid loading the local
-      # fastembed model (~300MB). Vectors stay 768-dim (gemini-embedding-001).
+      # Azure OpenAI (preferred): AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY,
+      # AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+        value: text-embedding-3-small
+      # Google fallback: EMBEDDING_API_KEY (gemini-embedding-001, 768-dim)
       - key: EMBEDDING_API_KEY
         sync: false

@@ -77,18 +77,25 @@ class Settings(BaseSettings):
         return self.gemini_transcription_model.strip() or self.gemini_model
 
     # --- RAG / embeddings ---
-    # The Stanford gateway exposes no embedding model, so by default we embed locally
-    # (offline, free) via fastembed. Set embedding_api_key to a Google AIza key to use
-    # Gemini gemini-embedding-001 instead. Both are 768-dim to match kb_documents.embedding.
+    # The Stanford gateway exposes no embedding model. Three backends (pick one via env):
+    #   - azure: text-embedding-3-small @ 768-dim (AZURE_OPENAI_* vars)
+    #   - google: gemini-embedding-001 @ 768-dim (EMBEDDING_API_KEY)
+    #   - local: fastembed BAAI/bge-base-en-v1.5 (offline; OOM on Render free tier)
+    # Ingest and query MUST use the same backend.
     embedding_local_model: str = "BAAI/bge-base-en-v1.5"  # 768-dim, ONNX, offline
-    embedding_model: str = "gemini-embedding-001"  # used only with a Google-direct key
-    embedding_api_key: str = ""  # Google AIza key; blank => local embeddings
+    embedding_model: str = "gemini-embedding-001"  # Google-only
+    embedding_api_key: str = ""  # Google key; blank unless using Google backend
     embedding_base_url: str = "https://generativelanguage.googleapis.com"
     embedding_dimension: int = 768
+    # Azure OpenAI embeddings (preferred for bulk ingest — higher rate limits than Google free tier)
+    azure_openai_endpoint: str = ""
+    azure_openai_api_key: str = ""
+    azure_openai_embedding_deployment: str = "text-embedding-3-small"
+    azure_openai_api_version: str = "2024-02-01"
     kb_top_k: int = 4  # guidance chunks fed to the scorer per answer
     # Local RAG loads a ~300MB ONNX embedding model. Disable on memory-constrained hosts
     # (Render free tier). Scoring still works; reference coaching blocks are omitted.
-    # Re-enable with EMBEDDING_API_KEY (Google) or more RAM.
+    # Re-enable with Azure or Google cloud embeddings (no local ONNX load).
     rag_enabled: bool = True
     # Reranker: a local cross-encoder reorders the hybrid candidates for precision.
     # Retrieve `rerank_pool`, rerank, keep `kb_top_k`. Offline via fastembed (no API cost).
@@ -106,6 +113,18 @@ class Settings(BaseSettings):
     # Debug routes (Gemini smoke test). OFF by default — they are unauthenticated and
     # let anyone spend your LLM budget. Set ENABLE_DEBUG_ROUTES=true in local .env only.
     enable_debug_routes: bool = False
+
+    @property
+    def azure_embeddings_configured(self) -> bool:
+        return bool(
+            self.azure_openai_endpoint
+            and self.azure_openai_api_key
+            and self.azure_openai_embedding_deployment
+        )
+
+    @property
+    def cloud_embeddings_configured(self) -> bool:
+        return self.azure_embeddings_configured or bool(self.embedding_api_key)
 
 
 settings = Settings()
