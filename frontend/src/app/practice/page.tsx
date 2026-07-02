@@ -51,6 +51,7 @@ export default function Practice() {
   const [question, setQuestion] = useState<Question | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [scoring, setScoring] = useState(false);
+  const [scoreError, setScoreError] = useState<string | null>(null);
   const [attemptNum, setAttemptNum] = useState(1);
   const [prevScore, setPrevScore] = useState<number | null>(null);
   const [scratch, setScratch] = useState("");
@@ -105,11 +106,13 @@ export default function Practice() {
       const pseudocode = isCoding ? scratchRef.current : undefined;
       setScoring(true);
       setScorecard(null);
+      setScoreError(null);
       setModelAns(null);
       try {
         setScorecard(await scoreAttempt(sessionId, pseudocode));
-      } catch {
+      } catch (err) {
         setScorecard(null);
+        setScoreError(err instanceof Error ? err.message : "Scoring failed");
       } finally {
         setScoring(false);
         getBudget().then(setBudget).catch(() => {});
@@ -280,6 +283,7 @@ export default function Practice() {
     setSession(null);
     setScorecard(null);
     setScoring(false);
+    setScoreError(null);
     setWords([]);
     setTranscriptText("");
     setTranscriptStreaming(false);
@@ -486,6 +490,9 @@ export default function Practice() {
                 <p className="text-sm text-muted">
                   Couldn&rsquo;t score this answer — but your Speak Lexicon is still available.
                 </p>
+                {scoreError && (
+                  <p className="text-xs mono text-muted/80 max-w-md mx-auto">{scoreError}</p>
+                )}
                 <div className="flex gap-3 justify-center">
                   <SketchButton onClick={handleRetry}>Retry</SketchButton>
                   <SketchButton variant="ghost" onClick={handleNewQuestion}>New question</SketchButton>

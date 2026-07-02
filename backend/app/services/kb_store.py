@@ -252,6 +252,8 @@ def retrieve_similar(
     from app.services import reranker  # local import avoids a heavy import at module load
 
     top_k = top_k or settings.kb_top_k
+    if not settings.rag_enabled and not settings.embedding_api_key:
+        return []
     query_vec = embed_text(query)
     if query_vec is None:
         return []

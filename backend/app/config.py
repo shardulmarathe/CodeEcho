@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     embedding_base_url: str = "https://generativelanguage.googleapis.com"
     embedding_dimension: int = 768
     kb_top_k: int = 4  # guidance chunks fed to the scorer per answer
+    # Local RAG loads a ~300MB ONNX embedding model. Disable on memory-constrained hosts
+    # (Render free tier). Scoring still works; reference coaching blocks are omitted.
+    # Re-enable with EMBEDDING_API_KEY (Google) or more RAM.
+    rag_enabled: bool = True
     # Reranker: a local cross-encoder reorders the hybrid candidates for precision.
     # Retrieve `rerank_pool`, rerank, keep `kb_top_k`. Offline via fastembed (no API cost).
     rerank_enabled: bool = True

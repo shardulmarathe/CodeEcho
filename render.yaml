@@ -32,8 +32,11 @@ services:
         sync: false
       - key: ENABLE_DEBUG_ROUTES
         value: "false"
-      # Free tier is 512MB RAM. Local ONNX models (embeddings + reranker) exceed that.
-      # Hybrid retrieval still runs in Supabase; only the cross-encoder rerank is skipped.
+      # Free tier is 512MB RAM. Local ONNX models OOM the process during scoring.
+      # LLM scorecards still work; RAG coaching blocks are skipped until you add
+      # EMBEDDING_API_KEY (Google) or upgrade RAM.
+      - key: RAG_ENABLED
+        value: "false"
       - key: RERANK_ENABLED
         value: "false"
       # Optional: set EMBEDDING_API_KEY (Google AIza) to avoid loading the local
