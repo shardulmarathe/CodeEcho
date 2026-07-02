@@ -89,7 +89,7 @@ export default function TestPage() {
       <nav className="border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Mascot state="idle" size={36} />
-          <span className="font-bold text-lg tracking-tight">FillerAI</span>
+          <span className="font-bold text-lg tracking-tight">CodeEcho</span>
           <span className="text-xs text-neutral-400">API test</span>
         </div>
         <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-900">

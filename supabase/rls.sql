@@ -1,4 +1,4 @@
--- FillerAI — Row Level Security (Phase 1: default-deny hardening)
+-- CodeEcho — Row Level Security (Phase 1: default-deny hardening)
 -- ---------------------------------------------------------------------------
 -- WHY: Supabase exposes every public table over its auto REST/GraphQL API. The
 -- project's ANON key is public by design (it ships to browsers). With RLS OFF,

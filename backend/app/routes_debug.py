@@ -193,7 +193,7 @@ async def gemini_audio_test(file: UploadFile = File(...)):
     suffix = Path(file.filename or "audio.webm").suffix.lower() or ".webm"
     start = time.perf_counter()
 
-    with tempfile.TemporaryDirectory(prefix="fillerai_debug_audio_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="codeecho_debug_audio_") as tmp:
         raw_path = Path(tmp) / f"upload{suffix}"
         raw_path.write_bytes(await file.read())
         wav_path, wav_tmp = preprocess_for_transcription(raw_path)
@@ -278,7 +278,7 @@ async def gemini_transcribe_session_test(
     suffix = Path(file.filename or "audio.webm").suffix.lower() or ".webm"
     start = time.perf_counter()
 
-    with tempfile.TemporaryDirectory(prefix="fillerai_debug_session_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="codeecho_debug_session_") as tmp:
         raw_path = Path(tmp) / f"upload{suffix}"
         raw_path.write_bytes(await file.read())
 

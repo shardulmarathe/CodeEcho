@@ -161,7 +161,7 @@ def preprocess_for_transcription(audio_path: Path) -> tuple[Path, Path | None]:
             "ffmpeg is required for audio transcription. Install it with: brew install ffmpeg"
         )
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="fillerai_audio_"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="codeecho_audio_"))
     tmp = tmp_dir / "transcribe_input.wav"
     try:
         subprocess.run(
@@ -223,7 +223,7 @@ def split_audio_into_chunks(
     if not shutil.which("ffmpeg"):
         return [(audio_path, 0.0, duration)], None
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="fillerai_chunks_"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="codeecho_chunks_"))
     chunks: list[tuple[Path, float, float]] = []
     start = 0.0
     index = 0

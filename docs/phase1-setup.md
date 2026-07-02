@@ -1,6 +1,6 @@
 # Phase 1 Setup — Auth, Persistence, Guest Mode, Rate Limiting
 
-Phase 1 reshapes FillerAI into the SWE interview-prep foundation: **Clerk** auth,
+Phase 1 reshapes CodeEcho into the SWE interview-prep foundation: **Clerk** auth,
 **Supabase** persistence (backend-mediated), a **guest mode** (5 free attempts that
 transfer to your account on signup), and **rate limiting**.
 

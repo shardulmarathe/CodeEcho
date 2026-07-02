@@ -102,7 +102,7 @@ Run [`supabase/schema.sql`](supabase/schema.sql) in your Supabase SQL editor whe
 ## Project Structure
 
 ```
-FillerAI/
+CodeEcho/
 ├── frontend/          # Next.js app
 ├── backend/           # FastAPI API
 ├── supabase/          # Database schema

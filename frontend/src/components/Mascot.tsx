@@ -31,7 +31,7 @@ export function Mascot({ state = "idle", size = 80 }: MascotProps) {
         height={size}
         viewBox="0 0 80 80"
         className={state === "idle" ? "mascot-bounce" : ""}
-        aria-label="FillerAI mascot"
+        aria-label="CodeEcho mascot"
       >
         {/* Head */}
         <circle cx="40" cy="40" r="36" fill="white" stroke="#0a0a0a" strokeWidth="2.5" />

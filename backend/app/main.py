@@ -12,7 +12,7 @@ from app.routes import router
 from app.services.ratelimit import limiter
 
 app = FastAPI(
-    title="FillerAI API",
+    title="CodeEcho API",
     description="SWE interview-prep platform — delivery analysis + scorecards",
     version="0.2.0",
 )

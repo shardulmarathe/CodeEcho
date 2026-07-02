@@ -5,7 +5,7 @@
 // session token attached as a Bearer header. The backend prefers the Bearer
 // token when present and falls back to the guest token.
 
-const GUEST_KEY = "fillerai_guest_token";
+const GUEST_KEY = "codeecho_guest_token";
 
 export const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 

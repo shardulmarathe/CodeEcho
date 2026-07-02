@@ -1,4 +1,4 @@
--- FillerAI / SWE Interview Prep — Supabase schema
+-- CodeEcho / SWE Interview Prep — Supabase schema
 -- Auth is handled by CLERK; user_id columns store Clerk user ids (TEXT, e.g. 'user_2ab...').
 -- Run this in the Supabase SQL editor. pgvector is used for RAG (Phase 3).
 

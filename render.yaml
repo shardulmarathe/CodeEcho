@@ -1,8 +1,8 @@
-# FillerAI backend — Render Blueprint (Docker, free tier)
+# CodeEcho backend — Render Blueprint (Docker, free tier)
 # Secrets marked sync: false — set in Render Dashboard or via MCP, never commit values.
 services:
   - type: web
-    name: fillerai-backend
+    name: codeecho-backend
     runtime: docker
     plan: free
     region: oregon
