@@ -153,6 +153,27 @@ def count() -> int:
     return len(_load_index()["docs"])
 
 
+def delete_bucket(bucket: str) -> int:
+    """Remove all chunks tagged with `meta.bucket`. Returns rows removed (best-effort)."""
+    if not bucket:
+        return 0
+    if supabase_client.is_configured():
+        try:
+            client = supabase_client.get_client()
+            res = client.table("kb_documents").delete().filter("meta->>bucket", "eq", bucket).execute()
+            return len(res.data or [])
+        except Exception:
+            pass
+    with _lock:
+        idx = _load_index()
+        before = len(idx["docs"])
+        idx["docs"] = [d for d in idx["docs"] if (d.get("meta") or {}).get("bucket") != bucket]
+        removed = before - len(idx["docs"])
+        if removed:
+            _save_index(idx)
+        return removed
+
+
 def _rows_to_docs(rows: list[dict]) -> list[KBDocument]:
     return [
         KBDocument(

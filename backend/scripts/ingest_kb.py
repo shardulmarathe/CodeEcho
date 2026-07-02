@@ -20,7 +20,7 @@ from pathlib import Path
 from app.models import KBDocument
 from app.services import kb_store
 from app.services.embeddings import active_model_name, embed_batch
-from app.services.kb_store import INDEX_PATH
+from app.services.kb_store import INDEX_PATH, delete_bucket
 
 CHUNK_WORDS = 250
 CHUNK_OVERLAP = 40
@@ -53,6 +53,11 @@ def main() -> int:
     parser.add_argument("folder", help="Folder containing .pdf files")
     parser.add_argument("--bucket", default=None, help="Tag all chunks with a behavioral bucket")
     parser.add_argument("--reset", action="store_true", help="Clear the local index before ingesting")
+    parser.add_argument(
+        "--replace-bucket",
+        action="store_true",
+        help="Delete existing Supabase chunks for --bucket before ingesting",
+    )
     args = parser.parse_args()
 
     folder = Path(args.folder)
@@ -63,6 +68,11 @@ def main() -> int:
     if args.reset and INDEX_PATH.exists():
         INDEX_PATH.unlink()
         print(f"Cleared local index {INDEX_PATH}")
+
+    if args.replace_bucket and args.bucket:
+        removed = delete_bucket(args.bucket)
+        if removed:
+            print(f"Cleared {removed} existing chunks for bucket={args.bucket}")
 
     pdfs = sorted(folder.glob("*.pdf"))
     if not pdfs:

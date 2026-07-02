@@ -43,31 +43,53 @@ def _get_local():
 
 
 def _embed_google(texts: list[str]) -> list[list[float]]:
+    if not texts:
+        return []
     base = settings.embedding_base_url.rstrip("/")
     model = settings.embedding_model
-    url = f"{base}/v1beta/models/{model}:embedContent"
+    single_url = f"{base}/v1beta/models/{model}:embedContent"
+    batch_url = f"{base}/v1beta/models/{model}:batchEmbedContents"
     out: list[list[float]] = []
-    with httpx.Client(timeout=60.0) as client:
-        for text in texts:
-            payload: dict = {
-                "model": f"models/{model}",
-                "content": {"parts": [{"text": text}]},
-            }
-            if settings.embedding_dimension:
-                payload["outputDimensionality"] = settings.embedding_dimension
-            for attempt in range(6):
-                resp = client.post(
-                    url,
-                    params={"key": settings.embedding_api_key},
-                    json=payload,
-                )
-                if resp.status_code in (429, 503) and attempt < 5:
-                    time.sleep(min(2**attempt, 30))
-                    continue
-                resp.raise_for_status()
-                break
+    batch_size = 8
+
+    def _request(client: httpx.Client, url: str, payload: dict) -> httpx.Response:
+        for attempt in range(12):
+            resp = client.post(
+                url,
+                params={"key": settings.embedding_api_key},
+                json=payload,
+            )
+            if resp.status_code in (429, 503) and attempt < 11:
+                time.sleep(min(2**attempt + 1, 90))
+                continue
+            resp.raise_for_status()
+            return resp
+        raise RuntimeError("unreachable")
+
+    def _request_payload(text: str) -> dict:
+        payload: dict = {
+            "model": f"models/{model}",
+            "content": {"parts": [{"text": text}]},
+        }
+        if settings.embedding_dimension:
+            payload["outputDimensionality"] = settings.embedding_dimension
+        return payload
+
+    with httpx.Client(timeout=120.0) as client:
+        if len(texts) == 1:
+            resp = _request(client, single_url, _request_payload(texts[0]))
             out.append([float(x) for x in resp.json()["embedding"]["values"]])
-            time.sleep(0.25)
+        else:
+            for start in range(0, len(texts), batch_size):
+                chunk = texts[start : start + batch_size]
+                resp = _request(
+                    client,
+                    batch_url,
+                    {"requests": [_request_payload(text) for text in chunk]},
+                )
+                for emb in resp.json().get("embeddings", []):
+                    out.append([float(x) for x in emb["values"]])
+                time.sleep(2.5)
     # Rough token estimate for the ledger (~1.3 tokens/word).
     tokens = sum(int(len(t.split()) * 1.3) for t in texts)
     try:
