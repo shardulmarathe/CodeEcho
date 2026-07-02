@@ -1,0 +1,34 @@
+# FillerAI backend — Render Blueprint (Docker, free tier)
+# Secrets marked sync: false — set in Render Dashboard or via MCP, never commit values.
+services:
+  - type: web
+    name: fillerai-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_GEMINI_BASE_URL
+        value: https://api.llm.stanford.edu
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_TRANSCRIPTION_MODEL
+        value: gemini-2.5-flash
+      - key: API_BUDGET_CAP_USD
+        value: "3.0"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: audio
+      - key: CLERK_ISSUER
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ENABLE_DEBUG_ROUTES
+        value: "false"

@@ -1,0 +1,18 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.0
+httpx==0.28.1
+openai==1.59.3
+google-generativeai==0.8.4
+python-dotenv==1.0.1
+aiofiles==24.1.0
+sse-starlette==2.2.1
+supabase==2.11.0
+PyJWT[crypto]==2.13.0
+slowapi==0.1.10
+# RAG: local embeddings + PDF ingestion
+fastembed==0.8.0
+pypdf==6.14.2
+numpy==2.2.6

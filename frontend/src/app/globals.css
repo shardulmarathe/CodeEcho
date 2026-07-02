@@ -1,0 +1,345 @@
+@import "tailwindcss";
+
+/* CodeEcho — off-white paper + black ink, with yellow accents (hand-drawn) */
+:root {
+  --bg: #f6f3ea; /* off-white warm paper */
+  --surface: #fffdf6; /* cards — near-white cream */
+  --surface-2: #efeadd; /* subtle raised surface */
+  --border: #1b1b1b; /* black ink outlines */
+  --fg: #1b1b1b; /* near-black text */
+  --muted: #6f6a5f; /* warm grey */
+  --echo: #1b1b1b; /* accent/primary = black (replaces the turquoise) */
+  --echo-bright: #000000;
+  --amber: #eab308; /* yellow pop — the "intricacies" */
+  --on-echo: #f9f6ee; /* text/icons on a black (echo) fill */
+  /* sketch layer */
+  --ink: #1b1b1b; /* hard offset-shadow color (black) */
+  --sketch-shadow: 4px 4px 0 var(--ink);
+  --sketch-shadow-echo: 4px 4px 0 rgba(27, 27, 27, 0.3);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-echo: var(--echo);
+  --color-amber: var(--amber);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --font-hand: var(--font-hand);
+  --font-hand-body: var(--font-hand-body);
+}
+
+body {
+  background:
+    radial-gradient(1100px 560px at 82% -12%, rgba(234, 179, 8, 0.1), transparent 60%),
+    var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(234, 179, 8, 0.32);
+}
+
+/* type roles */
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+/* hand-drawn display roles — headings/wordmark (.hand) + doodle captions (.hand-body).
+   Deliberately NOT applied to long body text (legibility). */
+.hand {
+  font-family: var(--font-hand), var(--font-display), system-ui, sans-serif;
+}
+.hand-body {
+  font-family: var(--font-hand-body), var(--font-sans), system-ui, sans-serif;
+}
+.eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* surfaces */
+.panel {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.panel-2 {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.hairline {
+  border-color: var(--border);
+}
+
+/* buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.6rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.btn-primary {
+  background: var(--echo);
+  color: var(--on-echo);
+}
+.btn-primary:hover {
+  background: var(--echo-bright);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-ghost {
+  border: 1px solid var(--border);
+  color: var(--fg);
+  background: transparent;
+}
+.btn-ghost:hover {
+  border-color: var(--echo);
+  color: var(--echo);
+}
+
+/* form controls */
+select,
+textarea,
+input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 0.5rem;
+}
+select:focus,
+textarea:focus,
+input:focus {
+  outline: none;
+  border-color: var(--echo);
+  box-shadow: 0 0 0 1px rgba(78, 225, 193, 0.3);
+}
+
+/* ---- legacy token compatibility: existing components inherit the dark look ---- */
+.card-circle {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 1.5rem;
+}
+.btn-circle {
+  border-radius: 0.6rem;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.metric-ring {
+  display: flex;
+  height: 5rem;
+  width: 5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 2px solid var(--echo);
+  color: var(--fg);
+}
+.filler-word {
+  border-radius: 0.3rem;
+  padding: 0 0.25rem;
+  font-weight: 600;
+  background: rgba(245, 196, 81, 0.14);
+  color: var(--amber);
+  border: 1px solid rgba(245, 196, 81, 0.35);
+  cursor: help;
+}
+.timeline-marker {
+  height: 0.75rem;
+  width: 0.75rem;
+  border-radius: 9999px;
+  background: var(--echo);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.timeline-marker:hover {
+  transform: scale(1.5);
+}
+.tab-active {
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  color: var(--echo);
+  border: 1px solid var(--border);
+}
+.tab-inactive {
+  border-radius: 0.5rem;
+  color: var(--muted);
+}
+.tab-inactive:hover {
+  color: var(--fg);
+}
+
+/* override stray light-mode utilities used by older components */
+.bg-white {
+  background: var(--surface) !important;
+}
+.text-neutral-500,
+.text-neutral-400,
+.text-neutral-600 {
+  color: var(--muted) !important;
+}
+.text-neutral-900 {
+  color: var(--fg) !important;
+}
+.bg-neutral-50,
+.bg-neutral-100 {
+  background: var(--surface-2) !important;
+}
+
+/* waveform / echo motif */
+@keyframes echo-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.echo-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--echo);
+  transform-origin: center;
+  animation: echo-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.cursor-blink {
+  animation: cursor-blink 1.1s step-end infinite;
+}
+
+/* ---- sketch layer ---------------------------------------------------------- */
+/* Hard offset shadow (no blur) — the signature of the hand-drawn look. */
+.sketch-shadow {
+  box-shadow: var(--sketch-shadow);
+}
+.sketch-shadow-echo {
+  box-shadow: var(--sketch-shadow-echo);
+}
+/* Wobbly, uneven corner radii so boxes read hand-drawn, not machine-perfect. */
+.wobble {
+  border-radius: 14px 22px 16px 20px / 20px 16px 22px 14px;
+}
+.wobble-2 {
+  border-radius: 22px 14px 20px 16px / 16px 20px 14px 22px;
+}
+/* Slight rotations for a pinned-note feel. */
+.tilt-l {
+  transform: rotate(-1.2deg);
+}
+.tilt-r {
+  transform: rotate(1.2deg);
+}
+.doodle-stroke {
+  color: var(--echo);
+}
+
+/* Press feedback for hand-drawn buttons: shift onto the offset shadow. */
+.sketch-press {
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.sketch-press:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+/* Sketchy waveform bars — wobbly caps, organic bob (not clean lines). */
+@keyframes wave-bob {
+  0%,
+  100% {
+    transform: scaleY(0.32);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.sketch-wave-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: currentColor;
+  border-radius: 46% 54% 50% 50% / 34% 30% 70% 66%;
+  transform-origin: bottom center;
+  animation: wave-bob 1.15s ease-in-out infinite;
+}
+
+/* Gentle floating bob for the mode-select circles. */
+@keyframes float-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.float {
+  animation: float-bob 4s ease-in-out infinite;
+}
+.float-delay {
+  animation: float-bob 4.6s ease-in-out infinite;
+  animation-delay: 0.6s;
+}
+
+/* "Draw-on" reveal for hand-drawn SVG strokes (used by SketchReveal). */
+@keyframes draw-on {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.draw-path {
+  stroke-dasharray: var(--len, 1000);
+  stroke-dashoffset: var(--len, 1000);
+  animation: draw-on 0.9s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .echo-bar,
+  .cursor-blink,
+  .float,
+  .float-delay,
+  .sketch-wave-bar {
+    animation: none;
+  }
+  .draw-path {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+}
