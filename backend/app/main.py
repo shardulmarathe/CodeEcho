@@ -41,10 +41,14 @@ app.include_router(router, prefix="/api")
 
 @app.on_event("startup")
 def _warm_models() -> None:
-    """Pre-load the RAG reranker in the background so the first scored answer isn't
-    slowed by a cold model load. Runs in a daemon thread — never blocks startup or
-    the health check, and is a no-op when reranking is disabled."""
+    """Pre-load the RAG reranker locally so the first scored answer isn't slowed by a
+    cold model load. Skipped on Render — free tier has 512MB RAM and loading the
+    cross-encoder (~200MB ONNX) there causes OOM during scoring."""
+    import os
     import threading
+
+    if os.getenv("RENDER") == "true":
+        return
 
     from app.services import reranker
 

@@ -70,6 +70,8 @@ async def health():
         "llm_model": settings.gemini_model,
         "scoring_model": settings.effective_scoring_model,
         "whisper_deployment": settings.azure_openai_whisper_deployment or None,
+        "rag_enabled": settings.rag_enabled,
+        "rerank_enabled": settings.rerank_enabled,
         "ffmpeg_available": bool(shutil.which("ffmpeg")),
         "google_gemini_base_url": settings.google_gemini_base_url or None,
         "clerk_configured": clerk_configured(),

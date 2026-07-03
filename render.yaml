@@ -43,14 +43,13 @@ services:
         sync: false
       - key: ENABLE_DEBUG_ROUTES
         value: "false"
-      # Free tier is 512MB RAM. Embeddings run on Azure (below), so no 300MB local embed
-      # model loads — the reranker (~150-200MB cross-encoder) is the only local ONNX model,
-      # and reordering RAG chunks materially improves retrieval precision (esp. coding).
-      # If the process OOMs on free tier, upgrade the instance or set RERANK_ENABLED=false.
+      # Free tier = 512MB RAM. Keep RERANK_ENABLED=false here: the cross-encoder loads
+      # ~150-200MB of ONNX at runtime and OOMs during scoring. Hybrid pgvector + keyword
+      # retrieval still runs; only the rerank pass is skipped. Enable locally instead.
       - key: RAG_ENABLED
         value: "true"
       - key: RERANK_ENABLED
-        value: "true"
+        value: "false"
       # Azure OpenAI (preferred): AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY,
       # AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
       - key: AZURE_OPENAI_ENDPOINT
