@@ -408,7 +408,7 @@ export default function Practice() {
             <ProcessingSteps step={processingStep} mockMode={mockMode} statusMessage={statusMessage} />
             {transcriptSource === "live" && (
               <div className="panel p-4 text-sm text-center" style={{ color: "var(--amber)" }}>
-                Using the browser live transcript — Gemini audio transcription was unavailable.
+                Using the browser live transcript — audio transcription was unavailable.
               </div>
             )}
             {(words.length > 0 || transcriptText || processingStep === "transcribing") && (

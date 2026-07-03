@@ -43,6 +43,8 @@ GEMINI_AUDIO_TOKENS_PER_MINUTE = 1500
 GEMINI_AUDIO_COST_PER_1M_TOKENS = 1.0
 # Embeddings: local model is free ($0); Google text-embedding-004 ~$0.02/1M tokens
 EMBEDDING_COST_PER_1M_TOKENS = 0.02
+# Azure OpenAI Whisper transcription ~$0.006 / audio-minute
+WHISPER_COST_PER_MINUTE = 0.006
 
 # The row key for total spend across everyone in the durable store.
 GLOBAL_SUBJECT = "global"
@@ -238,6 +240,10 @@ def estimate_gemini_audio_cost(duration_sec: float) -> float:
     minutes = duration_sec / 60.0
     tokens = minutes * GEMINI_AUDIO_TOKENS_PER_MINUTE
     return (tokens / 1_000_000) * GEMINI_AUDIO_COST_PER_1M_TOKENS
+
+
+def estimate_whisper_cost(duration_sec: float) -> float:
+    return (duration_sec / 60.0) * WHISPER_COST_PER_MINUTE
 
 
 def estimate_gemini_cost(input_tokens: int, output_tokens: int) -> float:

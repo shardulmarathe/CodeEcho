@@ -18,6 +18,17 @@ services:
         value: gemini-2.5-flash
       - key: GEMINI_TRANSCRIPTION_MODEL
         value: gemini-2.5-pro
+      # Azure Whisper (preferred STT) — when set, transcription uses Whisper with
+      # word-level timestamps instead of Gemini. Endpoint/key fall back to the
+      # AZURE_OPENAI_* embedding creds below. Leave the deployment blank to disable.
+      - key: AZURE_OPENAI_WHISPER_DEPLOYMENT
+        sync: false
+      - key: AZURE_OPENAI_WHISPER_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_WHISPER_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_WHISPER_API_VERSION
+        value: "2024-06-01"
       - key: API_BUDGET_CAP_USD
         value: "3.0"
       - key: SUPABASE_URL

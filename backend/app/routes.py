@@ -52,12 +52,21 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 @router.get("/health")
 async def health():
-    configured = is_configured()
+    gemini_ok = is_configured()
+    whisper_ok = settings.whisper_configured
+    if whisper_ok:
+        transcription_provider = "whisper"
+    elif gemini_ok:
+        transcription_provider = get_provider_label()
+    else:
+        transcription_provider = "mock"
     return {
         "status": "ok",
-        "gemini_configured": configured,
-        "mock_mode": not configured,
-        "transcription_provider": get_provider_label() if configured else "mock",
+        "gemini_configured": gemini_ok,
+        "whisper_configured": whisper_ok,
+        "transcription_configured": settings.transcription_configured,
+        "mock_mode": not settings.transcription_configured,
+        "transcription_provider": transcription_provider,
         "llm_model": settings.gemini_model,
         "transcription_model": settings.effective_transcription_model,
         "ffmpeg_available": bool(shutil.which("ffmpeg")),

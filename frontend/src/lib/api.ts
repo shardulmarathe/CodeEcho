@@ -69,6 +69,8 @@ export async function getHealth() {
   return request<{
     status: string;
     gemini_configured: boolean;
+    whisper_configured?: boolean;
+    transcription_configured?: boolean;
     mock_mode: boolean;
     transcription_provider: string;
     llm_model?: string;

@@ -68,7 +68,7 @@ async def run_analysis_pipeline(
         update_session(session)
         emit("status", {"status": "transcribing", "message": "Sending audio for transcription..."})
 
-        if is_configured():
+        if settings.transcription_configured:
             partial_queue: asyncio.Queue[tuple[list, str, bool]] = asyncio.Queue()
 
             def on_partial(words, text, complete):
@@ -113,7 +113,7 @@ async def run_analysis_pipeline(
                         "status",
                         {
                             "status": "transcribing",
-                            "message": "Transcribing with Gemini...",
+                            "message": "Transcribing your answer...",
                         },
                     )
                     last_status = now
@@ -144,7 +144,7 @@ async def run_analysis_pipeline(
                 "transcript_source",
                 {
                     "source": "live",
-                    "message": "Using browser live transcript — Gemini audio transcription failed.",
+                    "message": "Using browser live transcript — audio transcription failed.",
                 },
             )
         else:

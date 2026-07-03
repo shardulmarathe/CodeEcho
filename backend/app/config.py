@@ -23,7 +23,15 @@ class Settings(BaseSettings):
     # UIT AI API Gateway (OpenAI-compatible) — only if you have a UIT gateway key
     llm_base_url: str = ""
 
-    @field_validator("gemini_api_key", "google_gemini_base_url", "llm_base_url", mode="before")
+    @field_validator(
+        "gemini_api_key",
+        "google_gemini_base_url",
+        "llm_base_url",
+        "azure_openai_whisper_endpoint",
+        "azure_openai_whisper_api_key",
+        "azure_openai_whisper_deployment",
+        mode="before",
+    )
     @classmethod
     def strip_str_fields(cls, v: object) -> str:
         return str(v or "").strip()
@@ -75,6 +83,38 @@ class Settings(BaseSettings):
     @property
     def effective_transcription_model(self) -> str:
         return self.gemini_transcription_model.strip() or self.gemini_model
+
+    # --- Azure OpenAI Whisper transcription (preferred STT when configured) ---
+    # When set, audio is transcribed by Azure Whisper (whisper-1) with native
+    # word-level timestamps instead of Gemini. Answer scoring stays on gemini_model.
+    # Endpoint/key fall back to the shared AZURE_OPENAI_* embedding creds when blank,
+    # so a single Azure resource can serve both. Word timestamps need api-version
+    # >= 2024-06-01.
+    azure_openai_whisper_deployment: str = ""  # e.g. "whisper"; blank disables Whisper STT
+    azure_openai_whisper_endpoint: str = ""    # falls back to azure_openai_endpoint
+    azure_openai_whisper_api_key: str = ""     # falls back to azure_openai_api_key
+    azure_openai_whisper_api_version: str = "2024-06-01"
+
+    @property
+    def whisper_endpoint(self) -> str:
+        return (self.azure_openai_whisper_endpoint or self.azure_openai_endpoint).rstrip("/")
+
+    @property
+    def whisper_api_key(self) -> str:
+        return self.azure_openai_whisper_api_key or self.azure_openai_api_key
+
+    @property
+    def whisper_configured(self) -> bool:
+        return bool(
+            self.whisper_endpoint
+            and self.whisper_api_key
+            and self.azure_openai_whisper_deployment
+        )
+
+    @property
+    def transcription_configured(self) -> bool:
+        """True when audio can be transcribed (Azure Whisper and/or Gemini)."""
+        return self.whisper_configured or bool(self.gemini_api_key)
 
     # --- RAG / embeddings ---
     # The Stanford gateway exposes no embedding model. Three backends (pick one via env):

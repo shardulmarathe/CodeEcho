@@ -6,13 +6,19 @@ from enum import Enum
 from pathlib import Path
 import shutil
 
+from app.config import settings
 from app.models import WordTimestamp
 from app.services.audio_utils import (
     effective_duration_sec,
     preprocess_for_transcription,
     split_audio_into_chunks,
 )
-from app.services.budget import check_budget, estimate_gemini_audio_cost, record_cost
+from app.services.budget import (
+    check_budget,
+    estimate_gemini_audio_cost,
+    estimate_whisper_cost,
+    record_cost,
+)
 from app.services.llm_client import get_provider, is_configured, transcribe_with_strategies
 
 CHUNK_DURATION_SEC = 15.0
@@ -303,17 +309,66 @@ def _reindex_words(words: list[WordTimestamp]) -> list[WordTimestamp]:
     ]
 
 
+def _transcribe_via_whisper(
+    processed_path: Path,
+    total_duration: float,
+    on_partial: Callable[[list[WordTimestamp], str, bool], None] | None,
+    fallback_transcript: str | None,
+    audio_name: str,
+) -> tuple[list[WordTimestamp], str, float, str]:
+    """Transcribe via Azure Whisper (single request, real word-level timestamps).
+
+    Whisper does not loop/refuse/echo the way Gemini does, so it needs none of the
+    repetition-collapse or hallucination cleanup the Gemini path carries.
+    """
+    from app.services import whisper
+
+    words, transcript = whisper.transcribe_words(processed_path)
+    transcript = transcript.strip()
+    word_count = len(transcript.split())
+    min_words = _min_words_for_duration(total_duration)
+
+    if not transcript or word_count < min_words:
+        live_result = _apply_live_fallback(
+            fallback_transcript, total_duration, on_partial, audio_name
+        )
+        if live_result:
+            return live_result
+        raise ValueError(
+            f"Transcription too short: Whisper returned {word_count} word(s) "
+            f"({transcript!r}) for {total_duration:.1f}s of audio "
+            f"(need at least {min_words})."
+        )
+
+    # Fall back to character-weighted timings only if the API omitted word timestamps.
+    if not words:
+        words = align_transcript_to_timestamps(transcript, total_duration)
+
+    if on_partial:
+        on_partial(words, transcript, True)
+
+    record_cost(
+        "azure_whisper_transcription",
+        f"Whisper transcribe {audio_name}",
+        estimate_whisper_cost(total_duration),
+    )
+
+    return words, transcript, total_duration, "whisper"
+
+
 def transcribe_audio(
     audio_path: Path,
     on_partial: Callable[[list[WordTimestamp], str, bool], None] | None = None,
     fallback_transcript: str | None = None,
 ) -> tuple[list[WordTimestamp], str, float, str]:
     """
-    Returns (words, transcript, duration_sec, source) where source is 'gemini' or 'live'.
+    Returns (words, transcript, duration_sec, source) where source is
+    'whisper', 'gemini', or 'live'.
     """
-    if not is_configured():
+    if not settings.transcription_configured:
         raise ValueError(
-            "GEMINI_API_KEY is not configured. Add it to backend/.env to enable transcription."
+            "No transcription provider configured. Set AZURE_OPENAI_WHISPER_DEPLOYMENT "
+            "(plus Azure endpoint/key) or GEMINI_API_KEY in backend/.env."
         )
 
     if audio_path.stat().st_size < 100:
@@ -325,6 +380,15 @@ def transcribe_audio(
     total_duration = effective_duration_sec(processed_path)
 
     try:
+        if settings.whisper_configured:
+            return _transcribe_via_whisper(
+                processed_path,
+                total_duration,
+                on_partial,
+                fallback_transcript,
+                audio_path.name,
+            )
+
         chunk_specs, chunk_tmp = split_audio_into_chunks(
             processed_path,
             CHUNK_DURATION_SEC,

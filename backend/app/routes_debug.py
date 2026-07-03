@@ -270,8 +270,13 @@ async def gemini_transcribe_session_test(
     live_transcript: str = Form(""),
 ):
     """Run the exact transcribe_audio() path used by the main app."""
-    if not is_configured():
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured")
+    from app.config import settings as app_settings
+
+    if not app_settings.transcription_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="No transcription provider configured (Whisper or GEMINI_API_KEY)",
+        )
     if not shutil.which("ffmpeg"):
         raise HTTPException(status_code=503, detail="ffmpeg not installed")
 
