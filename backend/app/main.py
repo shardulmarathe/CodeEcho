@@ -38,6 +38,19 @@ app.add_middleware(
 
 app.include_router(router, prefix="/api")
 
+
+@app.on_event("startup")
+def _warm_models() -> None:
+    """Pre-load the RAG reranker in the background so the first scored answer isn't
+    slowed by a cold model load. Runs in a daemon thread — never blocks startup or
+    the health check, and is a no-op when reranking is disabled."""
+    import threading
+
+    from app.services import reranker
+
+    if reranker.is_enabled():
+        threading.Thread(target=reranker.warm, name="rerank-warm", daemon=True).start()
+
 if settings.enable_debug_routes:
     from app.routes_debug import router as debug_router
 

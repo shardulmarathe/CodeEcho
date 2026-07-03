@@ -21,7 +21,7 @@ Storage:
 
 Public API (unchanged — many call sites depend on it):
   get_budget_status(), check_budget(), record_cost(),
-  estimate_gemini_cost(), estimate_gemini_audio_cost(), estimate_embedding_cost().
+  estimate_gemini_cost(), estimate_embedding_cost().
 """
 
 import json
@@ -30,17 +30,25 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from app.config import settings
 from app.models import BudgetStatus
 from app.services import supabase_client, usage
 
-# Rough pricing estimates (USD)
-GEMINI_COST_PER_1K_INPUT_TOKENS = 0.0001
+# Rough pricing estimates (USD per 1K tokens), per model. Flash is the historical ledger
+# baseline; pro is scaled to the public flash:pro ratio (~4x in, ~4x out) so switching the
+# scoring model to pro doesn't silently undercount spend against the $3/day Stanford cap.
+GEMINI_COST_PER_1K_INPUT_TOKENS = 0.0001  # default (flash) — kept for back-compat
 GEMINI_COST_PER_1K_OUTPUT_TOKENS = 0.0004
-# Gemini audio input ~$1/1M tokens; ~1500 tokens/min rough estimate
-GEMINI_AUDIO_TOKENS_PER_MINUTE = 1500
-GEMINI_AUDIO_COST_PER_1M_TOKENS = 1.0
+GEMINI_TEXT_PRICING = {
+    "gemini-2.5-flash": {"input": 0.0001, "output": 0.0004},
+    "gemini-2.5-pro": {"input": 0.000417, "output": 0.0016},
+}
+_DEFAULT_TEXT_PRICING = {
+    "input": GEMINI_COST_PER_1K_INPUT_TOKENS,
+    "output": GEMINI_COST_PER_1K_OUTPUT_TOKENS,
+}
 # Embeddings: local model is free ($0); Google text-embedding-004 ~$0.02/1M tokens
 EMBEDDING_COST_PER_1M_TOKENS = 0.02
 # Azure OpenAI Whisper transcription ~$0.006 / audio-minute
@@ -236,20 +244,30 @@ def record_cost(service: str, description: str, cost_usd: float) -> BudgetStatus
         return _status_from_spent(ledger["global_spent_usd"])
 
 
-def estimate_gemini_audio_cost(duration_sec: float) -> float:
-    minutes = duration_sec / 60.0
-    tokens = minutes * GEMINI_AUDIO_TOKENS_PER_MINUTE
-    return (tokens / 1_000_000) * GEMINI_AUDIO_COST_PER_1M_TOKENS
-
 
 def estimate_whisper_cost(duration_sec: float) -> float:
     return (duration_sec / 60.0) * WHISPER_COST_PER_MINUTE
 
 
-def estimate_gemini_cost(input_tokens: int, output_tokens: int) -> float:
-    return (input_tokens / 1000) * GEMINI_COST_PER_1K_INPUT_TOKENS + (
-        output_tokens / 1000
-    ) * GEMINI_COST_PER_1K_OUTPUT_TOKENS
+def _text_pricing_for_model(model: Optional[str]) -> dict:
+    """Per-1K-token rates for a Gemini text model. Unknown/blank -> flash default;
+    any '...pro...' model maps to pro pricing."""
+    if not model:
+        return _DEFAULT_TEXT_PRICING
+    key = model.strip().lower()
+    for name, rates in GEMINI_TEXT_PRICING.items():
+        if key.startswith(name):
+            return rates
+    if "pro" in key:
+        return GEMINI_TEXT_PRICING["gemini-2.5-pro"]
+    return _DEFAULT_TEXT_PRICING
+
+
+def estimate_gemini_cost(
+    input_tokens: int, output_tokens: int, model: Optional[str] = None
+) -> float:
+    rates = _text_pricing_for_model(model)
+    return (input_tokens / 1000) * rates["input"] + (output_tokens / 1000) * rates["output"]
 
 
 def estimate_embedding_cost(tokens: int) -> float:

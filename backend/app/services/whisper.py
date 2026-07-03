@@ -55,6 +55,9 @@ def transcribe_words(audio_path: Path, *, temperature: float = 0.0) -> tuple[lis
         "timestamp_granularities[]": "word",
         "temperature": str(temperature),
         "prompt": WHISPER_PROMPT,
+        # Pin English — interview answers are English, and a hint avoids Whisper
+        # occasionally misdetecting the language on short or accented clips.
+        "language": "en",
     }
 
     with httpx.Client(timeout=180.0) as client:

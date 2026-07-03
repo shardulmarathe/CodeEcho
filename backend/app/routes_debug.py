@@ -9,27 +9,14 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.services.audio_utils import (
-    effective_duration_sec,
-    preprocess_for_transcription,
-    split_audio_into_chunks,
-)
 from app.services.budget import record_cost
 from app.services.llm_client import (
     chat_completion_text,
     get_provider,
     get_provider_label,
     is_configured,
-    transcribe_with_strategies,
 )
-from app.services.transcribe import (
-    CHUNK_DURATION_SEC,
-    MIN_DURATION_TO_CHUNK_SEC,
-    TranscriptFailureReason,
-    _clean_verbatim,
-    classify_transcript_failure,
-    transcribe_audio,
-)
+from app.services.transcribe import transcribe_audio
 
 router = APIRouter(prefix="/debug/gemini", tags=["debug"])
 
@@ -54,45 +41,6 @@ def _base_url() -> str | None:
     if settings.llm_base_url:
         return settings.llm_base_url.rstrip("/")
     return None
-
-
-def _audio_diagnostic_result(
-    *,
-    ok: bool,
-    latency_ms: int,
-    duration: float,
-    audio_bytes: int,
-    raw_response: str | None,
-    cleaned_transcript: str | None,
-    failure_reason: str | None,
-    chunk_count: int,
-    transcript_source: str | None = None,
-    strategy: str | None = None,
-    model: str | None = None,
-    usage: dict | None = None,
-    attempts: list | None = None,
-    error: str | None = None,
-) -> dict:
-    return {
-        "ok": ok,
-        "provider": get_provider_label(),
-        "model": model or settings.effective_transcription_model,
-        "base_url": _base_url(),
-        "latency_ms": latency_ms,
-        "audio_duration_sec": round(duration, 2),
-        "audio_bytes": audio_bytes,
-        "chunk_count": chunk_count,
-        "raw_response": raw_response,
-        "cleaned_transcript": cleaned_transcript,
-        "transcript": cleaned_transcript,
-        "failure_reason": failure_reason,
-        "transcript_source": transcript_source,
-        "strategy": strategy,
-        "usage": usage,
-        "attempts": attempts,
-        "likely_hallucination": failure_reason == TranscriptFailureReason.HALLUCINATION.value,
-        "error": error,
-    }
 
 
 @router.get("/ping")
@@ -178,11 +126,12 @@ async def gemini_text_test(body: TextTestRequest):
 
 
 @router.post("/audio")
-async def gemini_audio_test(file: UploadFile = File(...)):
-    if not is_configured():
+async def whisper_audio_test(file: UploadFile = File(...)):
+    """Run the production Whisper transcribe_audio() path."""
+    if not settings.whisper_configured:
         raise HTTPException(
             status_code=503,
-            detail="GEMINI_API_KEY is not configured in backend/.env",
+            detail="Whisper is not configured (AZURE_OPENAI_WHISPER_DEPLOYMENT)",
         )
     if not shutil.which("ffmpeg"):
         raise HTTPException(
@@ -196,86 +145,44 @@ async def gemini_audio_test(file: UploadFile = File(...)):
     with tempfile.TemporaryDirectory(prefix="codeecho_debug_audio_") as tmp:
         raw_path = Path(tmp) / f"upload{suffix}"
         raw_path.write_bytes(await file.read())
-        wav_path, wav_tmp = preprocess_for_transcription(raw_path)
-        duration = effective_duration_sec(wav_path)
-        audio_bytes = wav_path.stat().st_size
-        chunk_specs, _ = split_audio_into_chunks(
-            wav_path,
-            CHUNK_DURATION_SEC,
-            min_duration_to_chunk=MIN_DURATION_TO_CHUNK_SEC,
-        )
 
         try:
-            result = transcribe_with_strategies(wav_path, temperature=0.0, min_words=1)
-            raw = result.text
-            cleaned = _clean_verbatim(raw)
+            words, transcript, duration, source = transcribe_audio(raw_path)
             latency_ms = int((time.perf_counter() - start) * 1000)
-            reason = classify_transcript_failure(raw, cleaned, duration)
-            failure = reason.value if reason else None
-            record_cost(
-                f"{get_provider().value}_debug",
-                "Gemini audio smoke test",
-                0.0005,
-            )
-            attempts = [
-                {
-                    "strategy": a.strategy,
-                    "model": a.model,
-                    "ok": a.ok,
-                    "latency_ms": a.latency_ms,
-                    "error": a.error,
-                    "finish_reason": a.finish_reason,
-                    "usage": a.usage,
-                }
-                for a in result.attempts
-            ]
-            return _audio_diagnostic_result(
-                ok=bool(cleaned) and reason is None,
-                latency_ms=latency_ms,
-                duration=duration,
-                audio_bytes=audio_bytes,
-                raw_response=raw,
-                cleaned_transcript=cleaned or None,
-                failure_reason=failure,
-                chunk_count=len(chunk_specs),
-                strategy=result.strategy,
-                model=result.model,
-                usage=result.usage,
-                attempts=attempts,
-                error=None
-                if reason is None
-                else f"Transcription issue: {failure}",
-            )
+            return {
+                "ok": bool(transcript),
+                "provider": "whisper",
+                "model": settings.azure_openai_whisper_deployment,
+                "latency_ms": latency_ms,
+                "audio_duration_sec": round(duration, 2),
+                "transcript": transcript,
+                "word_count": len(words),
+                "transcript_source": source,
+                "error": None,
+            }
         except Exception as e:
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return _audio_diagnostic_result(
-                ok=False,
-                latency_ms=latency_ms,
-                duration=duration,
-                audio_bytes=audio_bytes,
-                raw_response=None,
-                cleaned_transcript=None,
-                failure_reason=TranscriptFailureReason.API_ERROR.value,
-                chunk_count=len(chunk_specs),
-                error=str(e),
-            )
-        finally:
-            if wav_tmp and wav_tmp.exists():
-                shutil.rmtree(wav_tmp, ignore_errors=True)
+            return {
+                "ok": False,
+                "provider": "whisper",
+                "model": settings.azure_openai_whisper_deployment,
+                "latency_ms": latency_ms,
+                "transcript": None,
+                "transcript_source": None,
+                "error": str(e),
+            }
 
 
 @router.post("/transcribe-session")
-async def gemini_transcribe_session_test(
+async def transcribe_session_test(
     file: UploadFile = File(...),
     live_transcript: str = Form(""),
 ):
     """Run the exact transcribe_audio() path used by the main app."""
-    from app.config import settings as app_settings
-
-    if not app_settings.transcription_configured:
+    if not settings.whisper_configured:
         raise HTTPException(
             status_code=503,
-            detail="No transcription provider configured (Whisper or GEMINI_API_KEY)",
+            detail="Whisper is not configured (AZURE_OPENAI_WHISPER_DEPLOYMENT)",
         )
     if not shutil.which("ffmpeg"):
         raise HTTPException(status_code=503, detail="ffmpeg not installed")

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         "azure_openai_whisper_endpoint",
         "azure_openai_whisper_api_key",
         "azure_openai_whisper_deployment",
+        "gemini_scoring_model",
         mode="before",
     )
     @classmethod
@@ -74,19 +75,25 @@ class Settings(BaseSettings):
     # CORS
     frontend_url: str = "http://localhost:3000"
 
-    # Model for text analysis (fillers, transitions, debug tests)
+    # Model for fast text tasks (fillers, transitions, question generation, debug tests)
     gemini_model: str = "gemini-2.5-flash"
 
-    # Model for audio transcription
-    gemini_transcription_model: str = "gemini-2.5-pro"
+    # --- Answer scoring quality ---
+    # Scoring is reasoning-heavy — unlike fillers/transitions (thinkingBudget:0 for speed),
+    # scorecards run on pro with a real thinking budget for higher-quality rubric judgments.
+    gemini_scoring_model: str = "gemini-2.5-pro"
+    # >0 enables the model's reasoning pass; 0 disables it; <0 uses the model's own default.
+    gemini_scoring_thinking_budget: int = 2048
+    # Headroom so reasoning tokens don't starve the JSON scorecard output on the proxy.
+    gemini_scoring_max_output_tokens: int = 12288
 
     @property
-    def effective_transcription_model(self) -> str:
-        return self.gemini_transcription_model.strip() or self.gemini_model
+    def effective_scoring_model(self) -> str:
+        return self.gemini_scoring_model.strip() or self.gemini_model
 
     # --- Azure OpenAI Whisper transcription (preferred STT when configured) ---
-    # When set, audio is transcribed by Azure Whisper (whisper-1) with native
-    # word-level timestamps instead of Gemini. Answer scoring stays on gemini_model.
+    # When set, audio is transcribed by Azure Whisper with native word-level timestamps.
+    # Answer scoring stays on effective_scoring_model (pro by default).
     # Endpoint/key fall back to the shared AZURE_OPENAI_* embedding creds when blank,
     # so a single Azure resource can serve both. Word timestamps need api-version
     # >= 2024-06-01.
@@ -113,8 +120,8 @@ class Settings(BaseSettings):
 
     @property
     def transcription_configured(self) -> bool:
-        """True when audio can be transcribed (Azure Whisper and/or Gemini)."""
-        return self.whisper_configured or bool(self.gemini_api_key)
+        """True when Azure Whisper STT is configured."""
+        return self.whisper_configured
 
     # --- RAG / embeddings ---
     # The Stanford gateway exposes no embedding model. Three backends (pick one via env):
@@ -132,7 +139,7 @@ class Settings(BaseSettings):
     azure_openai_api_key: str = ""
     azure_openai_embedding_deployment: str = "text-embedding-3-small"
     azure_openai_api_version: str = "2024-02-01"
-    kb_top_k: int = 4  # guidance chunks fed to the scorer per answer
+    kb_top_k: int = 6  # guidance chunks fed to the scorer per answer
     # Local RAG loads a ~300MB ONNX embedding model. Disable on memory-constrained hosts
     # (Render free tier). Scoring still works; reference coaching blocks are omitted.
     # Re-enable with Azure or Google cloud embeddings (no local ONNX load).

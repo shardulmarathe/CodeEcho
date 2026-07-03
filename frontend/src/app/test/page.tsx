@@ -20,7 +20,8 @@ export default function TestPage() {
     mock_mode: boolean;
     transcription_provider: string;
     llm_model?: string;
-    transcription_model?: string;
+    scoring_model?: string;
+    whisper_deployment?: string | null;
     google_gemini_base_url?: string | null;
   } | null>(null);
   const [text, setText] = useState(SAMPLE_TEXT);
@@ -116,8 +117,12 @@ export default function TestPage() {
               {health.llm_model || "—"}
             </p>
             <p>
-              <span className="text-neutral-500">Transcription model:</span>{" "}
-              {health.transcription_model || health.llm_model || "—"}
+              <span className="text-neutral-500">Scoring model:</span>{" "}
+              {health.scoring_model || "—"}
+            </p>
+            <p>
+              <span className="text-neutral-500">Whisper deployment:</span>{" "}
+              {health.whisper_deployment || "—"}
             </p>
             <p>
               <span className="text-neutral-500">Base URL:</span>{" "}

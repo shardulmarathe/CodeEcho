@@ -32,6 +32,18 @@ def _get_model():
     return _model
 
 
+def warm() -> None:
+    """Pre-load the cross-encoder so the FIRST scored answer doesn't pay the model-load
+    cost (several seconds). Safe to call from a startup thread; no-op when reranking is
+    disabled, and swallows failures so startup never breaks on it."""
+    if not settings.rerank_enabled:
+        return
+    try:
+        _get_model()
+    except Exception:
+        pass
+
+
 def rerank(query: str, docs: list[KBDocument], top_k: int) -> list[KBDocument]:
     """Reorder `docs` by cross-encoder relevance to `query`, keeping the best `top_k`.
 

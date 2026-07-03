@@ -16,7 +16,7 @@ services:
         value: https://api.llm.stanford.edu
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
-      - key: GEMINI_TRANSCRIPTION_MODEL
+      - key: GEMINI_SCORING_MODEL
         value: gemini-2.5-pro
       # Azure Whisper (preferred STT) — when set, transcription uses Whisper with
       # word-level timestamps instead of Gemini. Endpoint/key fall back to the
@@ -43,13 +43,14 @@ services:
         sync: false
       - key: ENABLE_DEBUG_ROUTES
         value: "false"
-      # Free tier is 512MB RAM. Local ONNX models OOM the process during scoring.
-      # LLM scorecards still work; RAG coaching blocks are skipped until you add
-      # Cloud embeddings (Azure or Google) avoid loading local ONNX (~300MB) on free tier.
+      # Free tier is 512MB RAM. Embeddings run on Azure (below), so no 300MB local embed
+      # model loads — the reranker (~150-200MB cross-encoder) is the only local ONNX model,
+      # and reordering RAG chunks materially improves retrieval precision (esp. coding).
+      # If the process OOMs on free tier, upgrade the instance or set RERANK_ENABLED=false.
       - key: RAG_ENABLED
         value: "true"
       - key: RERANK_ENABLED
-        value: "false"
+        value: "true"
       # Azure OpenAI (preferred): AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY,
       # AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
       - key: AZURE_OPENAI_ENDPOINT

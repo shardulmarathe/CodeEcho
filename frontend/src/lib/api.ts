@@ -74,7 +74,8 @@ export async function getHealth() {
     mock_mode: boolean;
     transcription_provider: string;
     llm_model?: string;
-    transcription_model?: string;
+    scoring_model?: string;
+    whisper_deployment?: string | null;
     google_gemini_base_url?: string | null;
   }>("/api/health");
 }
