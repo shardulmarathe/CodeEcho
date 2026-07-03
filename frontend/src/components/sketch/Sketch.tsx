@@ -83,9 +83,10 @@ interface SketchBarProps {
   max?: number;
   height?: number;
   color?: string;
+  smooth?: boolean;
 }
 
-export function SketchBar({ value, max = 100, height = 12, color }: SketchBarProps) {
+export function SketchBar({ value, max = 100, height = 12, color, smooth = true }: SketchBarProps) {
   const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) * 100 : 0;
   return (
     <div
@@ -98,7 +99,7 @@ export function SketchBar({ value, max = 100, height = 12, color }: SketchBarPro
       }}
     >
       <div
-        className="h-full transition-[width] duration-500"
+        className={smooth ? "h-full transition-[width] duration-500" : "h-full"}
         style={{
           width: `${pct}%`,
           background: color || "var(--echo)",

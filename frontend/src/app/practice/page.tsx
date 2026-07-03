@@ -26,6 +26,7 @@ import { SketchButton } from "@/components/sketch/SketchButton";
 import { Scratchpad } from "@/components/Scratchpad";
 import { AnswerScaffold } from "@/components/AnswerScaffold";
 import { ModelAnswerPanel } from "@/components/ModelAnswer";
+import { ScoringLoader } from "@/components/ScoringLoader";
 
 type AppState = "setup" | "processing" | "results";
 
@@ -51,6 +52,7 @@ export default function Practice() {
   const [question, setQuestion] = useState<Question | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [scoring, setScoring] = useState(false);
+  const [showScorecard, setShowScorecard] = useState(false);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [attemptNum, setAttemptNum] = useState(1);
   const [prevScore, setPrevScore] = useState<number | null>(null);
@@ -64,6 +66,7 @@ export default function Practice() {
   const completedRef = useRef(false);
   const questionRef = useRef<Question | null>(null);
   const scratchRef = useRef("");
+  const scoringStartedAtRef = useRef<number | null>(null);
 
   const updateScratch = (v: string) => {
     scratchRef.current = v;
@@ -105,6 +108,8 @@ export default function Practice() {
         questionRef.current.meta?.track !== "project";
       const pseudocode = isCoding ? scratchRef.current : undefined;
       setScoring(true);
+      setShowScorecard(false);
+      scoringStartedAtRef.current = Date.now();
       setScorecard(null);
       setScoreError(null);
       setModelAns(null);
@@ -113,8 +118,9 @@ export default function Practice() {
       } catch (err) {
         setScorecard(null);
         setScoreError(err instanceof Error ? err.message : "Scoring failed");
-      } finally {
         setScoring(false);
+        scoringStartedAtRef.current = null;
+      } finally {
         getBudget().then(setBudget).catch(() => {});
       }
     }
@@ -283,6 +289,8 @@ export default function Practice() {
     setSession(null);
     setScorecard(null);
     setScoring(false);
+    setShowScorecard(false);
+    scoringStartedAtRef.current = null;
     setScoreError(null);
     setWords([]);
     setTranscriptText("");
@@ -439,14 +447,20 @@ export default function Practice() {
 
         {appState === "results" && session && resultsView === "scores" && (
           <div className="space-y-6">
-            {scoring && (
-              <div className="panel p-8 flex flex-col items-center gap-3">
-                <Waveform bars={24} active height={36} />
-                <p className="text-sm text-muted">Scoring your answer against the rubric…</p>
-              </div>
+            {scoring && !showScorecard && (
+              <ScoringLoader
+                active={scoring}
+                complete={!!scorecard}
+                startedAt={scoringStartedAtRef.current}
+                onReady={() => {
+                  setShowScorecard(true);
+                  setScoring(false);
+                  scoringStartedAtRef.current = null;
+                }}
+              />
             )}
 
-            {scorecard && (
+            {showScorecard && scorecard && (
               <ScorecardGrid
                 scorecard={scorecard}
                 footer={

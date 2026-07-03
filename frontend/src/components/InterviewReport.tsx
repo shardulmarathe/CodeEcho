@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { InterviewReport as Report, Scorecard } from "@/lib/types";
 import { scoreAttempt } from "@/lib/api";
 import { ScorecardView } from "@/components/ScorecardView";
 import { SketchBox } from "@/components/sketch/Sketch";
 import { SketchButton } from "@/components/sketch/SketchButton";
 import { Doodle } from "@/components/sketch/Doodle";
+import { ScoringLoader } from "@/components/ScoringLoader";
 
 function scoreColor(score: number): string {
   return score >= 3.5 ? "var(--fg)" : "var(--amber)";
@@ -40,6 +41,8 @@ export function InterviewReport({
   const [open, setOpen] = useState<string | null>(null);
   // per-question scorecards, fetched on demand
   const [cards, setCards] = useState<Record<string, Scorecard | "loading" | "error">>({});
+  const [turnRevealed, setTurnRevealed] = useState<Record<string, boolean>>({});
+  const turnStartedAtRef = useRef<Record<string, number>>({});
 
   const general = report.general_scorecard;
   const mains = report.turns.filter((t) => !t.is_followup).length;
@@ -53,6 +56,8 @@ export function InterviewReport({
     }
     setOpen(turnId);
     if (attemptId && !cards[turnId]) {
+      turnStartedAtRef.current[turnId] = Date.now();
+      setTurnRevealed((r) => ({ ...r, [turnId]: false }));
       setCards((c) => ({ ...c, [turnId]: "loading" }));
       try {
         const sc = await scoreAttempt(attemptId);
@@ -167,14 +172,35 @@ export function InterviewReport({
                 {open === t.turn_id && (
                   <div className="p-4 pt-0">
                     {cards[t.turn_id] === "loading" && (
-                      <p className="text-sm text-muted">Scoring this answer…</p>
+                      <ScoringLoader
+                        active
+                        startedAt={turnStartedAtRef.current[t.turn_id] ?? null}
+                        size="compact"
+                      />
                     )}
+                    {cards[t.turn_id] &&
+                      cards[t.turn_id] !== "loading" &&
+                      cards[t.turn_id] !== "error" &&
+                      !turnRevealed[t.turn_id] && (
+                        <ScoringLoader
+                          active
+                          complete
+                          startedAt={turnStartedAtRef.current[t.turn_id] ?? Date.now()}
+                          size="compact"
+                          onReady={() =>
+                            setTurnRevealed((r) => ({ ...r, [t.turn_id]: true }))
+                          }
+                        />
+                      )}
                     {cards[t.turn_id] === "error" && (
                       <p className="text-sm" style={{ color: "#f87171" }}>Couldn&rsquo;t score this one.</p>
                     )}
-                    {cards[t.turn_id] && cards[t.turn_id] !== "loading" && cards[t.turn_id] !== "error" && (
-                      <ScorecardView scorecard={cards[t.turn_id] as Scorecard} />
-                    )}
+                    {turnRevealed[t.turn_id] &&
+                      cards[t.turn_id] &&
+                      cards[t.turn_id] !== "loading" &&
+                      cards[t.turn_id] !== "error" && (
+                        <ScorecardView scorecard={cards[t.turn_id] as Scorecard} />
+                      )}
                   </div>
                 )}
               </SketchBox>
