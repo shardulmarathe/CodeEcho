@@ -26,13 +26,13 @@ export function ModeSelect() {
     <div className="flex flex-col items-center gap-12 py-6 w-full">
       <SketchReveal delay={40}>
         <div className="relative inline-block">
-          <h2 className="hand text-5xl md:text-6xl font-bold">How do you want to practice?</h2>
+          <h2 className="hand text-4xl sm:text-5xl md:text-6xl font-bold">How do you want to practice?</h2>
           <Doodle name="squiggle" className="text-amber absolute -bottom-5 left-1/2 -translate-x-1/2" width={240} />
         </div>
       </SketchReveal>
 
       <div
-        className="flex flex-wrap items-center justify-center gap-16 md:gap-28 pt-4"
+        className="flex flex-wrap items-center justify-center gap-12 sm:gap-16 md:gap-28 pt-4"
         style={{
           opacity: picked ? 0 : 1,
           transform: picked ? "scale(0.85)" : "scale(1)",

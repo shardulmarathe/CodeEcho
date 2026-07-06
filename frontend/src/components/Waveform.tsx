@@ -26,7 +26,7 @@ export function Waveform({
 }: WaveformProps) {
   return (
     <div
-      className={`flex items-center ${spread ? "w-full justify-between" : "gap-[3px]"} ${className}`}
+      className={`flex items-center overflow-hidden max-w-full ${spread ? "w-full justify-between" : "justify-center gap-[3px]"} ${className}`}
       style={{ height }}
       aria-hidden
     >

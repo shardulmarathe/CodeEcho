@@ -7,7 +7,7 @@ import { AuthControls } from "@/components/auth/AuthControls";
 export function Nav() {
   return (
     <nav className="border-b hairline">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-3">
         <Link
           href="/"
           className="hand text-2xl font-bold tracking-tight inline-flex items-center"

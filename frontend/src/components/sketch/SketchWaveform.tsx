@@ -18,7 +18,7 @@ export function SketchWaveform({
 }) {
   return (
     <div
-      className={`flex items-center justify-center gap-1.5 ${className}`}
+      className={`flex items-center justify-center gap-1.5 overflow-hidden max-w-full ${className}`}
       style={{ height }}
       aria-hidden
     >

@@ -75,7 +75,7 @@ export function Doodle({
       viewBox={d.vb}
       width={width}
       className={className}
-      style={{ overflow: "visible", ...style }}
+      style={{ overflow: "visible", maxWidth: "100%", ...style }}
       fill="none"
       stroke="currentColor"
       strokeWidth={strokeWidth}

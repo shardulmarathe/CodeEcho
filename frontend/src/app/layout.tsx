@@ -31,10 +31,35 @@ const handBody = Patrick_Hand({
 
 const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+// Canonical site URL: explicit override → Vercel's production URL → localhost.
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  ? process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")
+  : process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000";
+
+const description =
+  "Practice answering software-engineering interview questions out loud. Get scored on your reasoning and your delivery.";
+
+// og:image / twitter:image are injected automatically by the coded
+// opengraph-image.tsx / twitter-image.tsx routes.
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "CodeEcho — practice explaining, get the offer",
-  description:
-    "Practice answering software-engineering interview questions out loud. Get scored on your reasoning and your delivery.",
+  description,
+  openGraph: {
+    title: "CodeEcho — practice explaining, get the offer",
+    description,
+    url: siteUrl,
+    siteName: "CodeEcho",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CodeEcho — practice explaining, get the offer",
+    description,
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

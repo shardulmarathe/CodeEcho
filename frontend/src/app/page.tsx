@@ -18,7 +18,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen w-full flex flex-col items-center justify-center px-6 py-10">
+    <main className="min-h-dvh w-full flex flex-col items-center justify-center px-4 sm:px-6 py-10 overflow-x-hidden">
       <div
         className="w-full max-w-7xl flex flex-col items-center justify-center"
         style={{

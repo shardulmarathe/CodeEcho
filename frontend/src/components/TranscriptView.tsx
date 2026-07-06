@@ -67,7 +67,7 @@ export function TranscriptView({
         )}
       </div>
       {words.length > 0 ? (
-        <p className="text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed break-words">
           {words.map((w, i) => {
             const pause = pauseByAfterIndex.get(i);
             return (

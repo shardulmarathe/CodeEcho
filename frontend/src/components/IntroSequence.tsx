@@ -82,12 +82,12 @@ export function IntroSequence({ onStart }: { onStart: () => void }) {
 
       <SketchReveal delay={1050} className="flex flex-col items-center gap-4">
         <div className="relative inline-block">
-          <h1 className="hand text-7xl md:text-8xl font-bold tracking-tight">
+          <h1 className="hand text-6xl sm:text-7xl md:text-8xl font-bold tracking-tight">
             Code<span className="text-echo">Echo</span>
           </h1>
-          <Doodle name="underline" className="text-amber absolute -bottom-4 left-0" width={320} draw />
+          <Doodle name="underline" className="text-amber absolute -bottom-4 left-0 w-full" width={320} draw />
         </div>
-        <p className="text-muted max-w-lg text-lg leading-relaxed mt-3">
+        <p className="text-muted max-w-lg text-base sm:text-lg leading-relaxed mt-3 px-2">
           Answer real interview questions out loud. Get scored on what you say
           <span className="text-fg"> and </span>how you say it.
         </p>

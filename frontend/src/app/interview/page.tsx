@@ -161,9 +161,9 @@ export default function Interview() {
   }, [analysis]);
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-dvh flex flex-col overflow-x-hidden">
       <Nav />
-      <div className="max-w-7xl mx-auto px-8 py-10 w-full flex-1 flex flex-col">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 w-full flex-1 flex flex-col">
         {phase !== "report" && (
           <div className="mb-8 text-center">
             <h1 className="hand text-4xl md:text-5xl font-bold">Mock Interview</h1>

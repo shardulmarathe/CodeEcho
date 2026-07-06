@@ -348,9 +348,9 @@ export default function Practice() {
       : question?.qtype ?? "behavioral";
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-dvh flex flex-col overflow-x-hidden">
       <Nav />
-      <div className="max-w-7xl mx-auto px-8 py-10 w-full flex-1 flex flex-col justify-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 w-full flex-1 flex flex-col justify-center">
         {appState === "setup" && budget?.budget_exceeded && (
           <div className="panel p-5 text-center text-sm" style={{ color: "var(--amber)" }}>
             LLM budget cap reached — practice is paused.
@@ -365,7 +365,7 @@ export default function Practice() {
         {/* Answer screen — question + recorder, single centered column (no left rail). */}
         {appState === "setup" && !budget?.budget_exceeded && question && (
           <div className="max-w-4xl mx-auto w-full space-y-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="eyebrow">
                 {typeLabel} · attempt {attemptNum}
                 {prevScore !== null && ` · beat ${prevScore.toFixed(1)}/5`}

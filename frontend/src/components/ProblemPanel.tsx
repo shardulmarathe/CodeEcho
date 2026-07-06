@@ -6,7 +6,7 @@ export function ProblemPanel({ question }: { question: Question }) {
   const isTech = question.qtype === "technical";
   return (
     <div className="panel p-5 space-y-4">
-      <p className="font-medium text-lg leading-relaxed">{question.prompt}</p>
+      <p className="font-medium text-base sm:text-lg leading-relaxed break-words">{question.prompt}</p>
 
       {isTech && question.constraints && (
         <div>
@@ -19,7 +19,7 @@ export function ProblemPanel({ question }: { question: Question }) {
         <div className="space-y-2">
           <p className="eyebrow mb-1">examples</p>
           {question.examples.map((e, i) => (
-            <div key={i} className="panel-2 p-3 text-sm mono space-y-1">
+            <div key={i} className="panel-2 p-3 text-sm mono space-y-1 break-words">
               <div>
                 <span className="text-muted">in&nbsp;&nbsp;</span>
                 {e.input}

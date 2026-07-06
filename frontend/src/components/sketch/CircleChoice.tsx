@@ -44,10 +44,10 @@ export function CircleChoice({
       onClick={onPick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className={`group relative flex flex-col items-center justify-center text-center ${floatClass} focus-visible:outline-none cursor-pointer`}
+      className={`group relative flex flex-col items-center justify-center text-center ${floatClass} focus-visible:outline-none cursor-pointer max-w-full`}
       style={{
-        height: size,
-        width: size,
+        width: `min(${size}px, 82vw)`,
+        aspectRatio: "1 / 1",
         transition: "transform 0.25s cubic-bezier(0.2,0.8,0.2,1)",
         transform: hover ? "scale(1.06) rotate(-1deg)" : "scale(1)",
       }}

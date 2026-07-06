@@ -108,7 +108,7 @@ export function SpeakLexicon({
             {tagEntries.map(([tag, count]) => (
               <div key={tag}>
                 <div className="flex items-center gap-3">
-                  <span className="w-48 text-sm">{tagLabel(tag)}</span>
+                  <span className="w-28 sm:w-48 text-sm">{tagLabel(tag)}</span>
                   <div className="flex-1">
                     <SketchBar value={count} max={tagMax} height={14} />
                   </div>
