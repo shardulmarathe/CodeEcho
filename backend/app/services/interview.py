@@ -210,12 +210,38 @@ def decide_next(
     if next_q is None:
         next_index = turn.plan_index + 1
         if next_index < len(session.plan):
-            next_q = _realize_main(session.plan[next_index], session.config, identity)
+            # Use the background-prefetched question if it's ready; else generate now.
+            pre_id = session.prefetched.get(next_index)
+            next_q = store.get_question(pre_id) if pre_id else None
+            if next_q is None:
+                next_q = _realize_main(session.plan[next_index], session.config, identity)
             next_turn = _new_turn(next_index, next_q.id)
             session.turns.append(next_turn)
 
     store.update_interview(session)
     return next_turn, next_q
+
+
+def prefetch_main(session: InterviewSession, plan_index: int, identity: Identity) -> None:
+    """Generate the main question at ``plan_index`` ahead of time (background task).
+
+    Idempotent and best-effort: skips indices out of range, already realized as a turn,
+    or already prefetched, and swallows any error so a failed prefetch just falls back to
+    on-demand generation in ``decide_next``. Runs after the response is sent, during the
+    candidate's answer window, so main-question transitions don't wait on the LLM.
+    """
+    try:
+        if plan_index < 0 or plan_index >= len(session.plan):
+            return
+        if plan_index in session.prefetched:
+            return
+        if _main_turn(session, plan_index) is not None:
+            return
+        q = _realize_main(session.plan[plan_index], session.config, identity)
+        session.prefetched[plan_index] = q.id
+        store.update_interview(session)
+    except Exception:
+        pass
 
 
 def pending_turn(session: InterviewSession) -> Optional[InterviewTurn]:

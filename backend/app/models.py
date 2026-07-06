@@ -237,6 +237,10 @@ class InterviewSession(BaseModel):
     plan: list[InterviewMainSpec] = Field(default_factory=list)
     turns: list[InterviewTurn] = Field(default_factory=list)
     report: Optional[InterviewReport] = None
+    # Main questions realized AHEAD of time (plan_index -> question_id) so a transition
+    # to the next main question doesn't block on generation. Populated by a background
+    # prefetch after each turn; in-memory only (single worker), rebuilt lazily on restart.
+    prefetched: dict[int, str] = Field(default_factory=dict)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -252,6 +256,11 @@ class StartInterviewRequest(BaseModel):
 class AdvanceInterviewRequest(BaseModel):
     attempt_id: str  # the just-finished answer's attempt
     turn_id: Optional[str] = None  # the turn that attempt answered (defaults to current)
+    # Client-provided live transcript (browser speech-to-text). When present, the
+    # follow-up decision uses it immediately instead of waiting for the server-side
+    # Whisper transcript to finish persisting — lets /advance run in parallel with
+    # answer analysis. Falls back to the persisted attempt transcript when blank.
+    transcript: Optional[str] = None
 
 
 class InterviewQuestionResponse(BaseModel):

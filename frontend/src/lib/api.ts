@@ -265,12 +265,17 @@ export async function startInterview(
 export async function advanceInterview(
   interviewId: string,
   attemptId: string,
-  turnId?: string
+  turnId?: string,
+  transcript?: string
 ): Promise<InterviewQuestionResponse> {
   return request<InterviewQuestionResponse>(`/api/interviews/${interviewId}/advance`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ attempt_id: attemptId, turn_id: turnId ?? null }),
+    body: JSON.stringify({
+      attempt_id: attemptId,
+      turn_id: turnId ?? null,
+      transcript: transcript ?? null,
+    }),
   });
 }
 

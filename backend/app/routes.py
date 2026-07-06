@@ -3,7 +3,16 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -334,6 +343,7 @@ def _interview_response(session, turn, question) -> InterviewQuestionResponse:
 async def start_interview_route(
     request: Request,
     body: StartInterviewRequest,
+    background_tasks: BackgroundTasks,
     identity: Identity = Depends(get_optional_identity),
 ):
     _require_identity(identity)
@@ -345,6 +355,8 @@ async def start_interview_route(
         num_behavioral=body.num_behavioral,
         identity=identity,
     )
+    # Warm the next main question while the candidate answers the first one.
+    background_tasks.add_task(interview.prefetch_main, session, 1, identity)
     return _interview_response(session, turn, question)
 
 
@@ -354,22 +366,38 @@ async def advance_interview_route(
     request: Request,
     interview_id: str,
     body: AdvanceInterviewRequest,
+    background_tasks: BackgroundTasks,
     identity: Identity = Depends(get_optional_identity),
 ):
     _require_identity(identity)
     session = store.get_interview(interview_id, identity)
     if not session:
         raise HTTPException(status_code=404, detail="Interview not found")
-    attempt = store.get_attempt(body.attempt_id, identity)
-    if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
-    transcript = (attempt.transcript_text or " ".join(w.word for w in attempt.words)).strip()
-    if not transcript:
-        # Persist race (multi-worker): the answer hasn't finished analyzing. Retry shortly.
-        raise HTTPException(status_code=409, detail="Answer is still being processed. Retry shortly.")
+
+    # Prefer the client-provided live transcript so this call can run in parallel with
+    # server-side analysis; fall back to the persisted attempt transcript otherwise.
+    client_transcript = (body.transcript or "").strip()
+    if client_transcript:
+        transcript = client_transcript
+    else:
+        attempt = store.get_attempt(body.attempt_id, identity)
+        if not attempt:
+            raise HTTPException(status_code=404, detail="Attempt not found")
+        transcript = (attempt.transcript_text or " ".join(w.word for w in attempt.words)).strip()
+        if not transcript:
+            # The answer hasn't finished analyzing yet. Retry shortly.
+            raise HTTPException(
+                status_code=409, detail="Answer is still being processed. Retry shortly."
+            )
+
     turn, question = interview.decide_next(
         session, body.turn_id, body.attempt_id, transcript, identity
     )
+    # Warm the main question after the one we just landed on, for its eventual transition.
+    if turn is not None:
+        background_tasks.add_task(
+            interview.prefetch_main, session, turn.plan_index + 1, identity
+        )
     return _interview_response(session, turn, question)
 
 

@@ -21,11 +21,12 @@ type Phase = "setup" | "session" | "report";
 async function advanceWithRetry(
   interviewId: string,
   attemptId: string,
-  turnId: string | null
+  turnId: string | null,
+  transcript?: string
 ): Promise<InterviewQuestionResponse> {
   for (let i = 0; i < 4; i++) {
     try {
-      return await advanceInterview(interviewId, attemptId, turnId ?? undefined);
+      return await advanceInterview(interviewId, attemptId, turnId ?? undefined, transcript);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg.toLowerCase().includes("still being processed") && i < 3) {
@@ -51,6 +52,10 @@ export default function Interview() {
   const [error, setError] = useState<string | null>(null);
 
   const interviewIdRef = useRef<string | null>(null);
+  // The previous answer's analysis, still finishing in the background while the
+  // candidate moves to the next question. Awaited before the next answer (which
+  // resets the shared analysis stream) and before building the final report.
+  const pendingAnalysisRef = useRef<Promise<void> | null>(null);
 
   const applyNext = useCallback((r: InterviewQuestionResponse) => {
     setTurnId(r.turn_id ?? null);
@@ -90,15 +95,43 @@ export default function Interview() {
       setError(null);
       setBusy(true);
       try {
+        // Make sure the PREVIOUS answer's analysis has flushed before we reset the
+        // shared analysis stream for this one. (A prior background failure is
+        // non-blocking — that answer just misses delivery metrics in the report.)
+        if (pendingAnalysisRef.current) {
+          await pendingAnalysisRef.current.catch(() => {});
+          pendingAnalysisRef.current = null;
+        }
+
         // Record → transcribe → delivery metrics (no score; interview turns don't
-        // count against the single-answer attempt quota).
-        const attemptId = await analysis.start(blob, "answer.webm", {
+        // count against the single-answer attempt quota). Hand back the attempt id
+        // early so we can advance without waiting for transcription to finish.
+        const { attemptId, completion } = await analysis.startDetached(blob, "answer.webm", {
           liveTranscript,
           questionId: question.id,
           title: "Interview answer",
         });
-        const next = await advanceWithRetry(id, attemptId, turnId);
+
+        const live = (liveTranscript ?? "").trim();
+        let next: InterviewQuestionResponse;
+        if (live) {
+          // Fast path: advance in PARALLEL with transcription, using the live
+          // transcript for the follow-up decision. Analysis finishes in the background.
+          pendingAnalysisRef.current = completion.catch(() => {});
+          next = await advanceWithRetry(id, attemptId, turnId, live);
+        } else {
+          // No live transcript (browser STT unavailable) — wait for the server
+          // transcript so follow-ups stay grounded in the real answer.
+          await completion;
+          next = await advanceWithRetry(id, attemptId, turnId);
+        }
+
         if (next.done) {
+          // The final answer must be fully analyzed before we build the report.
+          if (pendingAnalysisRef.current) {
+            await pendingAnalysisRef.current.catch(() => {});
+            pendingAnalysisRef.current = null;
+          }
           await finishInterview(id);
         } else {
           applyNext(next);
@@ -114,6 +147,7 @@ export default function Interview() {
 
   const restart = useCallback(() => {
     analysis.reset();
+    pendingAnalysisRef.current = null;
     interviewIdRef.current = null;
     setInterviewId(null);
     setQuestion(null);

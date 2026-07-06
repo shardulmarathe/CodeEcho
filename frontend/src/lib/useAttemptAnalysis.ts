@@ -186,11 +186,20 @@ export function useAttemptAnalysis() {
   );
 
   /**
-   * Record→analyze a single answer. Resolves with the attempt id once analysis
-   * completes (state is populated). Throws on failure (state set to "error").
+   * Begin record→analyze for one answer but hand the attempt id back EARLY — as soon
+   * as the attempt exists — and return a `completion` promise that resolves once
+   * upload + transcription + delivery metrics finish. Lets the caller kick off other
+   * work (e.g. advancing the interview) in parallel with the analysis instead of after.
+   *
+   * The caller MUST await a prior `completion` before calling this again: analysis uses
+   * a single stream, and `reset()` here would otherwise tear down an in-flight one.
    */
-  const start = useCallback(
-    async (blob: Blob, filename: string, opts: StartOptions = {}): Promise<string> => {
+  const startDetached = useCallback(
+    async (
+      blob: Blob,
+      filename: string,
+      opts: StartOptions = {}
+    ): Promise<{ attemptId: string; completion: Promise<void> }> => {
       if (blob.size < 1000) {
         const msg = "That recording is too short. Aim for at least a few seconds.";
         setError(msg);
@@ -199,22 +208,46 @@ export function useAttemptAnalysis() {
       reset();
       setTranscriptStreaming(true);
       setProcessingStep("uploading");
+      let newSession;
       try {
-        const newSession = await createAttempt(opts.title ?? "Attempt", opts.questionId);
+        newSession = await createAttempt(opts.title ?? "Attempt", opts.questionId);
         setSession(newSession);
-        await uploadAudio(newSession.session_id, blob, filename, opts.liveTranscript);
-        setProcessingStep("transcribing");
-        setStatusMessage("Transcribing…");
-        await runStreamAnalysis(newSession.session_id);
-        return newSession.session_id;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
         setProcessingStep("error");
         closeStream();
         throw err;
       }
+      const attemptId = newSession.session_id;
+      const completion = (async () => {
+        try {
+          await uploadAudio(attemptId, blob, filename, opts.liveTranscript);
+          setProcessingStep("transcribing");
+          setStatusMessage("Transcribing…");
+          await runStreamAnalysis(attemptId);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Something went wrong");
+          setProcessingStep("error");
+          closeStream();
+          throw err;
+        }
+      })();
+      return { attemptId, completion };
     },
     [reset, runStreamAnalysis, closeStream]
+  );
+
+  /**
+   * Record→analyze a single answer. Resolves with the attempt id once analysis
+   * completes (state is populated). Throws on failure (state set to "error").
+   */
+  const start = useCallback(
+    async (blob: Blob, filename: string, opts: StartOptions = {}): Promise<string> => {
+      const { attemptId, completion } = await startDetached(blob, filename, opts);
+      await completion;
+      return attemptId;
+    },
+    [startDetached]
   );
 
   return {
@@ -235,6 +268,7 @@ export function useAttemptAnalysis() {
     setProcessingStep,
     // actions
     start,
+    startDetached,
     reset,
     closeStream,
     finish,
