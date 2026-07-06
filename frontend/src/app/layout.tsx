@@ -41,8 +41,8 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
 const description =
   "Practice answering software-engineering interview questions out loud. Get scored on your reasoning and your delivery.";
 
-// og:image / twitter:image are injected automatically by the coded
-// opengraph-image.tsx / twitter-image.tsx routes.
+// og:image is a screenshot of the live homepage, regenerated on every deploy by
+// scripts/capture-og.mjs -> public/og-home.png (see package.json build).
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "CodeEcho — practice explaining, get the offer",
@@ -54,11 +54,13 @@ export const metadata: Metadata = {
     siteName: "CodeEcho",
     type: "website",
     locale: "en_US",
+    images: [{ url: "/og-home.png", width: 1200, height: 630, alt: "CodeEcho" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "CodeEcho — practice explaining, get the offer",
     description,
+    images: ["/og-home.png"],
   },
 };
 

@@ -6,6 +6,8 @@ const backendUrl =
   "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  // Hide the dev-tools indicator so it can't appear in the build-time OG screenshot.
+  devIndicators: false,
   async rewrites() {
     if (backendUrl.includes("localhost")) return [];
     return [{ source: "/api/:path*", destination: `${backendUrl}/api/:path*` }];
