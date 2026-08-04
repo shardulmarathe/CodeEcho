@@ -13,5 +13,11 @@ __pycache__/
 node_modules/
 .next/
 .env.local
-.claude/
 .vercel
+
+# local editor config
+.claude/
+.cursor/
+
+# macOS/sync artefacts — duplicate copies nothing imports
+* [0-9].*

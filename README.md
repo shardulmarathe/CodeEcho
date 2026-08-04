@@ -4,14 +4,19 @@ SWE interview-prep platform. Answer software-engineering interview questions out
 
 > Formerly "FillerAI" (filler-word speech analytics) — pivoted to interview prep.
 
+**[Try it →](https://trycodeecho.vercel.app)**
+
 ## Stack
 
 - **Frontend**: Next.js 16, React, Tailwind CSS (Vercel)
-- **Backend**: FastAPI (Railway)
-- **Transcription**: Gemini via Stanford AI Gateway or Google AI Studio
-- **Transition Analysis**: Same LLM provider
-- **Database**: Supabase (Postgres + Storage)
+- **Backend**: FastAPI, containerized (Render, Docker web service)
+- **Transcription**: Azure OpenAI Whisper, with Gemini fallback
+- **Scoring**: Gemini via the Stanford AI Gateway or Google AI Studio
+- **Database**: Supabase (Postgres + Storage + pgvector for retrieval)
 - **Audio Processing**: FFmpeg
+
+For how the scoring pipeline, retrieval layer and cost guards actually work, see
+[ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Quick Start
 
