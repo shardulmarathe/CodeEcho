@@ -50,12 +50,12 @@ def build_plan(mode: str, section: Optional[str], num_behavioral: int) -> list[I
                     )
                 )
         else:
-            # system_design / project — one question, heavy follow-ups.
+            # system_design / project, one question, heavy follow-ups.
             specs.append(
                 InterviewMainSpec(qtype="technical", track=section, followup_cap=_HEAVY_CAP)
             )
     else:
-        # Behavioral — spread main questions across the buckets.
+        # Behavioral, spread main questions across the buckets.
         n = max(1, min(5, num_behavioral or 3))
         import random
 
@@ -164,7 +164,7 @@ def decide_next(
         turn = session.turns[-1]
 
     if turn.answered:
-        # Duplicate call — return the already-created next turn (if any).
+        # Duplicate call, return the already-created next turn (if any).
         idx = session.turns.index(turn)
         if idx + 1 < len(session.turns):
             nxt = session.turns[idx + 1]
@@ -287,7 +287,7 @@ def build_report(session: InterviewSession, identity: Identity) -> InterviewRepo
         transcript = (attempt.transcript_text or " ".join(w.word for w in attempt.words)).strip()
         tag = "Follow-up" if t.is_followup else "Question"
         qa_lines.append(f"[{tag}] {question.prompt}\nAnswer: {transcript or '(no answer)'}")
-        # Light turn — no per-question scorecard up front; attempt_id lets us fetch it later.
+        # Light turn, no per-question scorecard up front; attempt_id lets us fetch it later.
         report_turns.append(
             InterviewReportTurn(
                 turn_id=t.turn_id,

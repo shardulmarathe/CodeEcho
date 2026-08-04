@@ -2,7 +2,7 @@
 
 // Two-column session shell: a narrow left rail (question-type controls) and a larger
 // right column (the generated question + the recorder pinned at its bottom). Stacks on
-// small screens. Purely presentational — callers pass the pieces.
+// small screens. Purely presentational, callers pass the pieces.
 
 export function SessionLayout({
   left,

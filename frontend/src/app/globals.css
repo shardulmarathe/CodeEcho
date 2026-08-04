@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* CodeEcho — off-white paper + black ink, with yellow accents (hand-drawn) */
+/* CodeEcho, off-white paper + black ink, with yellow accents (hand-drawn) */
 :root {
   --bg: #f6f3ea; /* off-white warm paper */
   --surface: #fffdf6; /* cards — near-white cream */
@@ -53,7 +53,7 @@ body {
 .mono {
   font-family: var(--font-mono), ui-monospace, monospace;
 }
-/* hand-drawn display roles — headings/wordmark (.hand) + doodle captions (.hand-body).
+/* hand-drawn display roles, headings/wordmark (.hand) + doodle captions (.hand-body).
    Deliberately NOT applied to long body text (legibility). */
 .hand {
   font-family: var(--font-hand), var(--font-display), system-ui, sans-serif;
@@ -244,7 +244,7 @@ input:focus {
 }
 
 /* ---- sketch layer ---------------------------------------------------------- */
-/* Hard offset shadow (no blur) — the signature of the hand-drawn look. */
+/* Hard offset shadow (no blur), the signature of the hand-drawn look. */
 .sketch-shadow {
   box-shadow: var(--sketch-shadow);
 }
@@ -278,7 +278,7 @@ input:focus {
   box-shadow: 1px 1px 0 var(--ink);
 }
 
-/* Sketchy waveform bars — wobbly caps, organic bob (not clean lines). */
+/* Sketchy waveform bars, wobbly caps, organic bob (not clean lines). */
 @keyframes wave-bob {
   0%,
   100% {

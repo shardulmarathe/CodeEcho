@@ -17,7 +17,7 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# Rate limiting (per client IP) — protects against abuse and runaway LLM spend
+# Rate limiting (per client IP), protects against abuse and runaway LLM spend
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
@@ -62,7 +62,7 @@ if settings.enable_debug_routes:
 
 # Ensure local media dirs exist. Audio is served via the guarded /api/audio route
 # (or Supabase signed URLs in prod); filler clips via the /clips mount used by the
-# timeline player. The raw uploads dir is NOT mounted — it held every user's full
+# timeline player. The raw uploads dir is NOT mounted, it held every user's full
 # recordings with no path guard.
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
 Path(settings.clips_dir).mkdir(parents=True, exist_ok=True)

@@ -35,7 +35,7 @@ def compute_metrics(
     # WPM: all transcribed words over total audio duration (standard speech rate)
     wpm = len(words) / minutes if minutes > 0 else 0.0
 
-    # Pause analysis — all inter-word gaps (incl. small ones) for the average.
+    # Pause analysis, all inter-word gaps (incl. small ones) for the average.
     # The structured ``pauses`` list (passed in) holds only the larger surfaced gaps.
     gaps: list[float] = []
     for i in range(1, len(words)):
@@ -90,7 +90,7 @@ def compute_metrics(
     for f in fillers:
         filler_breakdown[f.word] = filler_breakdown.get(f.word, 0) + 1
 
-    # Tag breakdown — why fillers occurred (idea_transition / topic_mention / hesitation)
+    # Tag breakdown, why fillers occurred (idea_transition / topic_mention / hesitation)
     tag_breakdown: dict[str, int] = {}
     for f in fillers:
         if f.tag:

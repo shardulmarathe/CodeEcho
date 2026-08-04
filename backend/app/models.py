@@ -258,7 +258,7 @@ class AdvanceInterviewRequest(BaseModel):
     turn_id: Optional[str] = None  # the turn that attempt answered (defaults to current)
     # Client-provided live transcript (browser speech-to-text). When present, the
     # follow-up decision uses it immediately instead of waiting for the server-side
-    # Whisper transcript to finish persisting — lets /advance run in parallel with
+    # Whisper transcript to finish persisting, lets /advance run in parallel with
     # answer analysis. Falls back to the persisted attempt transcript when blank.
     transcript: Optional[str] = None
 

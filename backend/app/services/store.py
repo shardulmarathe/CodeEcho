@@ -190,7 +190,7 @@ def persist_attempt_results(session: SessionResult) -> None:
                 client.table("delivery_metrics").upsert(metrics_row).execute()
             except Exception:
                 # The `pauses` column may not exist yet (migration not applied). Don't
-                # let that drop the rest of the metrics — retry without it.
+                # let that drop the rest of the metrics, retry without it.
                 metrics_row.pop("pauses", None)
                 client.table("delivery_metrics").upsert(metrics_row).execute()
             # Replace child rows

@@ -2,7 +2,7 @@
 
 A pause is a stretch of silence in the delivery. We detect real silence from the
 audio waveform (ffmpeg ``silencedetect``) because the transcription model returns
-*contiguous* word timestamps — each word's end equals the next word's start — so
+*contiguous* word timestamps, each word's end equals the next word's start, so
 inter-word gaps are always zero and cannot reveal pauses. The detected silences are
 then mapped onto the transcript by time so they can be shown inline.
 

@@ -16,7 +16,7 @@ const mono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
-// Hand-drawn display fonts — headings/wordmark (Kalam) and doodle captions (Patrick Hand).
+// Hand-drawn display fonts, headings/wordmark (Kalam) and doodle captions (Patrick Hand).
 // Never used for long body text (see globals.css).
 const hand = Kalam({
   variable: "--font-hand",

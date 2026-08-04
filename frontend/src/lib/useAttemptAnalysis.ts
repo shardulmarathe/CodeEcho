@@ -31,7 +31,7 @@ export interface StartOptions {
 /**
  * Owns the full record→upload→SSE-stream→delivery-metrics lifecycle for a single
  * recorded answer. Shared by /practice and /interview. It deliberately does NOT
- * score — `start()` resolves with the finished attempt id and the caller decides
+ * score, `start()` resolves with the finished attempt id and the caller decides
  * what happens next (practice scores; interview advances to the next question).
  */
 export function useAttemptAnalysis() {
@@ -186,8 +186,8 @@ export function useAttemptAnalysis() {
   );
 
   /**
-   * Begin record→analyze for one answer but hand the attempt id back EARLY — as soon
-   * as the attempt exists — and return a `completion` promise that resolves once
+   * Begin record→analyze for one answer but hand the attempt id back EARLY, as soon
+   * as the attempt exists, and return a `completion` promise that resolves once
    * upload + transcription + delivery metrics finish. Lets the caller kick off other
    * work (e.g. advancing the interview) in parallel with the analysis instead of after.
    *

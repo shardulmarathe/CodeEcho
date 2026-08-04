@@ -97,7 +97,7 @@ export default function Interview() {
       try {
         // Make sure the PREVIOUS answer's analysis has flushed before we reset the
         // shared analysis stream for this one. (A prior background failure is
-        // non-blocking — that answer just misses delivery metrics in the report.)
+        // non-blocking, that answer just misses delivery metrics in the report.)
         if (pendingAnalysisRef.current) {
           await pendingAnalysisRef.current.catch(() => {});
           pendingAnalysisRef.current = null;
@@ -120,7 +120,7 @@ export default function Interview() {
           pendingAnalysisRef.current = completion.catch(() => {});
           next = await advanceWithRetry(id, attemptId, turnId, live);
         } else {
-          // No live transcript (browser STT unavailable) — wait for the server
+          // No live transcript (browser STT unavailable), wait for the server
           // transcript so follow-ups stay grounded in the real answer.
           await completion;
           next = await advanceWithRetry(id, attemptId, turnId);

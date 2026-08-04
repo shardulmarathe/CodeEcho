@@ -169,7 +169,7 @@ async def run_analysis_pipeline(
 
         fillers = detect_fillers(words)
 
-        # Disambiguate discourse markers (like/actually/basically/literally) in context —
+        # Disambiguate discourse markers (like/actually/basically/literally) in context -
         # they're fillers in some sentences and meaningful in others, so a regex can't decide.
         candidates = discourse_candidates(words)
         if candidates:
@@ -257,7 +257,7 @@ async def run_analysis_pipeline(
         update_session(session)
         emit("error", {"error": str(e)})
     except AudioValidationError as e:
-        # Safe, user-facing message (silent/too-short/too-quiet audio) — surface it so
+        # Safe, user-facing message (silent/too-short/too-quiet audio), surface it so
         # the user knows to re-record, rather than a generic failure.
         session.status = SessionStatus.FAILED
         session.error = str(e)

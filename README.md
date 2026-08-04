@@ -1,8 +1,8 @@
 # CodeEcho
 
-SWE interview-prep platform. Answer software-engineering interview questions out loud; CodeEcho transcribes you and scores both your **reasoning** (STAR / technical rubrics) and your **delivery** (filler words, pace, pauses) — then tells you what to fix. Two modes: a guided **Mock Interview** session and a single-question **Practice** loop.
+SWE interview-prep platform. Answer software-engineering interview questions out loud; CodeEcho transcribes you and scores both your **reasoning** (STAR / technical rubrics) and your **delivery** (filler words, pace, pauses), then tells you what to fix. Two modes: a guided **Mock Interview** session and a single-question **Practice** loop.
 
-> Formerly "FillerAI" (filler-word speech analytics) — pivoted to interview prep.
+> Formerly "FillerAI" (filler-word speech analytics), pivoted to interview prep.
 
 **[Try it →](https://trycodeecho.vercel.app)**
 
@@ -58,7 +58,7 @@ Open [http://localhost:3000](http://localhost:3000)
 | `GEMINI_API_KEY` | Yes | Google `AIza...` key OR Stanford gateway `sk-...` key |
 | `LLM_BASE_URL` | For Stanford keys | Default: `https://aiapi-prod.stanford.edu/v1` |
 | `GEMINI_MODEL` | Yes | Text analysis model (e.g. `gemini-2.5-flash`) |
-| `GEMINI_TRANSCRIPTION_MODEL` | No (default: `gemini-2.5-pro`) | Audio transcription model — use a multimodal model |
+| `GEMINI_TRANSCRIPTION_MODEL` | No (default: `gemini-2.5-pro`) | Audio transcription model, use a multimodal model |
 | `API_BUDGET_CAP_USD` | No (default: 5.0) | Hard spend cap |
 | `SUPABASE_URL` | Later | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Later | Supabase service key |
@@ -84,7 +84,7 @@ GEMINI_MODEL=gemini-2.5-flash
 GEMINI_TRANSCRIPTION_MODEL=gemini-2.5-pro
 ```
 
-Do **not** set `LLM_BASE_URL=https://aiapi-prod.stanford.edu` — that is a different UIT service.
+Do **not** set `LLM_BASE_URL=https://aiapi-prod.stanford.edu`, that is a different UIT service.
 
 ### UIT AI API Gateway (separate service)
 

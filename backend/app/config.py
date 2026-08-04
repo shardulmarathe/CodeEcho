@@ -14,13 +14,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # LLM API key — Google AIza... or Stanford llm.stanford.edu sk-...
+    # LLM API key. Google AIza... or Stanford llm.stanford.edu sk-...
     gemini_api_key: str = ""
 
     # Stanford llm.stanford.edu proxy (Gemini REST API format)
     google_gemini_base_url: str = ""
 
-    # UIT AI API Gateway (OpenAI-compatible) — only if you have a UIT gateway key
+    # UIT AI API Gateway (OpenAI-compatible), only if you have a UIT gateway key
     llm_base_url: str = ""
 
     @field_validator(
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "audio"
 
-    # Clerk auth — backend verifies session JWTs via Clerk's JWKS (RS256).
+    # Clerk auth, backend verifies session JWTs via Clerk's JWKS (RS256).
     # clerk_issuer is your Clerk Frontend API origin, e.g. https://your-app.clerk.accounts.dev
     clerk_issuer: str = ""
     clerk_jwks_url: str = ""  # defaults to {issuer}/.well-known/jwks.json when blank
@@ -64,7 +64,7 @@ class Settings(BaseSettings):
             return self.clerk_issuer.rstrip("/") + "/.well-known/jwks.json"
         return ""
 
-    # Rate limiting (slowapi) — per client IP
+    # Rate limiting (slowapi), per client IP
     rate_limit_default: str = "120/minute"
     rate_limit_expensive: str = "10/minute"  # upload / analyze / score / generate
 
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
 
     # --- Answer scoring quality ---
-    # Scoring is reasoning-heavy — unlike fillers/transitions (thinkingBudget:0 for speed),
+    # Scoring is reasoning-heavy, unlike fillers/transitions (thinkingBudget:0 for speed),
     # scorecards run on pro with a real thinking budget for higher-quality rubric judgments.
     gemini_scoring_model: str = "gemini-2.5-pro"
     # >0 enables the model's reasoning pass; 0 disables it; <0 uses the model's own default.
@@ -134,7 +134,7 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""  # Google key; blank unless using Google backend
     embedding_base_url: str = "https://generativelanguage.googleapis.com"
     embedding_dimension: int = 768
-    # Azure OpenAI embeddings (preferred for bulk ingest — higher rate limits than Google free tier)
+    # Azure OpenAI embeddings (preferred for bulk ingest, higher rate limits than Google free tier)
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
     azure_openai_embedding_deployment: str = "text-embedding-3-small"
@@ -151,13 +151,13 @@ class Settings(BaseSettings):
     rerank_pool: int = 20  # hybrid candidates fetched before reranking down to kb_top_k
 
     # Audio limits
-    # Hard cap on a single answer (1:30) — mirrors a typical interview answer length
+    # Hard cap on a single answer (1:30), mirrors a typical interview answer length
     # and bounds transcription cost. Enforced in the analysis pipeline before any paid
     # work; the recorder UI also auto-stops at this limit.
     max_audio_duration_sec: int = 90
     clip_padding_sec: float = 3.0
 
-    # Debug routes (Gemini smoke test). OFF by default — they are unauthenticated and
+    # Debug routes (Gemini smoke test). OFF by default, they are unauthenticated and
     # let anyone spend your LLM budget. Set ENABLE_DEBUG_ROUTES=true in local .env only.
     enable_debug_routes: bool = False
 

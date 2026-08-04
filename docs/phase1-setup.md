@@ -1,10 +1,10 @@
-# Phase 1 Setup — Auth, Persistence, Guest Mode, Rate Limiting
+# Phase 1 Setup: Auth, Persistence, Guest Mode, Rate Limiting
 
 Phase 1 reshapes CodeEcho into the SWE interview-prep foundation: **Clerk** auth,
 **Supabase** persistence (backend-mediated), a **guest mode** (5 free attempts that
 transfer to your account on signup), and **rate limiting**.
 
-The app **runs today without any of this configured** — it falls back to guest-only
+The app **runs today without any of this configured**, it falls back to guest-only
 mode with in-memory storage. Configure the services below to enable accounts and
 durable history.
 
@@ -51,7 +51,7 @@ GUEST_ATTEMPT_LIMIT=5
 ```
 
 The backend verifies Clerk session JWTs against Clerk's JWKS (RS256). No Clerk secret
-is required on the backend just to verify tokens — `CLERK_ISSUER` is enough.
+is required on the backend just to verify tokens, `CLERK_ISSUER` is enough.
 
 ## 3. Run
 

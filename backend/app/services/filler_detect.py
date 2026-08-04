@@ -5,7 +5,7 @@ from typing import Optional
 
 from app.models import FillerOccurrence, WordTimestamp
 
-# Non-lexical fillers — unambiguous, always counted. No real word collides with these,
+# Non-lexical fillers, unambiguous, always counted. No real word collides with these,
 # so they need no context to decide.
 CLASSIC_FILLERS = {
     "um", "umm", "uhm", "uh", "uhh", "er", "err", "ah", "ahh",
@@ -16,12 +16,12 @@ CLASSIC_FILLERS = {
 BIGRAM_FILLERS = [("you", "know")]
 
 # Discourse markers that are *sometimes* a verbal tic and sometimes a meaningful word.
-# These are never counted blindly — every occurrence is gathered as a CANDIDATE and
+# These are never counted blindly, every occurrence is gathered as a CANDIDATE and
 # judged in context (LLM when configured, heuristic fallback otherwise).
 DISCOURSE_MARKERS = {"like", "actually", "basically", "literally"}
 
 # Heuristic fallback only (used when no LLM): "like" preceded by one of these reads as a
-# real verb / comparison, not a filler — e.g. "I like", "would like", "looks like rain".
+# real verb / comparison, not a filler, e.g. "I like", "would like", "looks like rain".
 LIKE_REAL_PRECEDING = {
     "i", "you", "we", "they", "he", "she", "who", "to", "would", "wouldn't",
     "do", "don't", "does", "doesn't", "did", "didn't", "really", "also", "not",
@@ -32,7 +32,7 @@ LIKE_REAL_PRECEDING = {
 
 # Words that, when they immediately precede "like", make it a quotative discourse marker
 # ("I was like done", "she's like really fast", "they were like nope"). This is *always*
-# a filler — there is no verb/comparison reading — so it overrides LIKE_REAL_PRECEDING.
+# a filler, there is no verb/comparison reading, so it overrides LIKE_REAL_PRECEDING.
 LIKE_QUOTATIVE_PRECEDING = {"was", "were", "is", "am", "are", "be", "been", "m", "re", "s"}
 
 # Fixed transition phrases
@@ -151,7 +151,7 @@ def heuristic_discourse_fillers(
             if _like_is_filler_heuristic(words, i):
                 confirmed.add(i)
         else:
-            # actually / basically / literally — default to filler when no context.
+            # actually / basically / literally, default to filler when no context.
             confirmed.add(i)
     return confirmed
 

@@ -16,7 +16,7 @@ interface InterviewSessionProps {
   onAnswer: (result: RecordingResult) => void;
 }
 
-// Single, centered column — the question on top, the recorder below. No left rail.
+// Single, centered column, the question on top, the recorder below. No left rail.
 export function InterviewSession({
   question,
   progress,

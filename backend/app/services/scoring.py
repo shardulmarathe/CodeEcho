@@ -69,7 +69,7 @@ def _format_problem(question: Question) -> str:
         parts.append(f"Examples: {ex}")
     return "\n".join(parts)
 
-# Behavioral dimensions are per-bucket — see app.services.behavioral.BUCKETS.
+# Behavioral dimensions are per-bucket, see app.services.behavioral.BUCKETS.
 TECHNICAL_DIMENSIONS = [
     "Problem understanding",
     "Approach & optimization",
@@ -154,7 +154,7 @@ def _behavioral_prompt(
     sn = seniority_note(seniority)
     anchor = seniority_grading_anchor(seniority)
     seniority_clause = f"\n\nCalibrate your expectations: {sn}" if sn else ""
-    # Same behavioral questions across levels — what changes is the BAR. Give the scorer
+    # Same behavioral questions across levels, what changes is the BAR. Give the scorer
     # concrete per-level score anchors so scoring is level-appropriate.
     if anchor:
         seniority_clause += f"\n\nScore anchors for this level: {anchor}"

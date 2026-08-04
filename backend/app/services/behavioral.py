@@ -25,7 +25,7 @@ class Bucket:
     scoring_intro: str = ""  # technical tracks: the framing line for the scoring prompt
 
 
-# Shared tail dimensions on every behavioral answer — keeps delivery-grounded
+# Shared tail dimensions on every behavioral answer, keeps delivery-grounded
 # credibility consistent across all four buckets.
 _CONCISE = ("Conciseness", "tight and structured vs rambling (use the delivery stats)")
 _DELIVERY = ("Delivery", "spoken fluency and confidence given the filler/pace stats")
@@ -101,7 +101,7 @@ DEFAULT_BUCKET = "experience"
 # rubrics: every experience answer is scored on the same STAR dimensions above. The
 # competency just steers what a generated question asks about and what evidence the
 # scorer should reward. Only meaningful for the experience bucket; other buckets ignore it.
-# Easy to extend (e.g. "pressure", "influence", "mentorship") — just add an entry.
+# Easy to extend (e.g. "pressure", "influence", "mentorship"), just add an entry.
 EXPERIENCE_COMPETENCIES: dict[str, str] = {
     "conflict": "a disagreement with a teammate, manager, or stakeholder — how they navigated it to a resolution",
     "failure": "a mistake, bug, outage, or project that went wrong that they owned — and what they learned",
@@ -196,7 +196,7 @@ def get_bucket(key: str | None) -> Bucket:
     return BUCKETS.get((key or "").strip().lower(), BUCKETS[DEFAULT_BUCKET])
 
 
-# Seniority calibration — the "something personal depending on who it is" the user
+# Seniority calibration, the "something personal depending on who it is" the user
 # asked for. Scales expectations so an intern isn't graded against senior-level scope.
 _SENIORITY_CALIBRATION = {
     "intern": (

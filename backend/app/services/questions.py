@@ -76,7 +76,7 @@ _TECHNICAL_BANK = [
     "Given a string, how would you find the length of its longest substring without repeating characters?",
 ]
 
-# Real interview problem categories — one is picked per generation to steer variety and
+# Real interview problem categories, one is picked per generation to steer variety and
 # keep problems at genuine interview caliber (not toy exercises).
 CODING_CATEGORIES = [
     "arrays & hashing", "two pointers", "sliding window", "stack",
@@ -86,7 +86,7 @@ CODING_CATEGORIES = [
 ]
 
 # Coding difficulty band by seniority (used when no explicit difficulty is requested).
-# Bands run harder than the classic guidance — post-AI, interview bars have risen and even
+# Bands run harder than the classic guidance, post-AI, interview bars have risen and even
 # intern/new-grad rounds regularly include solid Mediums (and the occasional Hard).
 _SENIORITY_CODING_DIFFICULTY = {
     "intern": "LeetCode Easy to Medium (lean Medium; a straightforward one is fine too)",
@@ -292,7 +292,7 @@ Respond ONLY with valid JSON:
 
     try:
         # High temperature so repeated generations (same seniority/track) don't collapse
-        # onto an identical question — the low default made it return the same one every time.
+        # onto an identical question, the low default made it return the same one every time.
         text = chat_completion_text(prompt, temperature=0.9)
         data = _parse_json(text)
         _record(prompt, text, "Interview question generation")

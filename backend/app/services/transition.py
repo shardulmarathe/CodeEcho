@@ -207,7 +207,7 @@ Respond ONLY with valid JSON in this exact format:
             return set()
         return out
 
-    # Segments are independent — judge them concurrently.
+    # Segments are independent, judge them concurrently.
     confirmed: set[int] = set()
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(segments)))) as ex:
         for seg_result in ex.map(_process, segments):
@@ -305,7 +305,7 @@ Respond ONLY with valid JSON in this exact format:
             return {}
         return seg_tags
 
-    # Segments are independent — tag them concurrently, then merge.
+    # Segments are independent, tag them concurrently, then merge.
     tags: dict[int, dict] = {}
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(segments)))) as ex:
         for seg_result in ex.map(_process, segments):

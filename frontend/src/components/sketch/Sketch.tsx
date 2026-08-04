@@ -1,7 +1,7 @@
 "use client";
 
 // Hand-drawn UI primitives (dark-code + sketch fusion). SketchBox overlays a rough.js
-// wobbly border on a filled surface with a hard offset shadow — the signature look.
+// wobbly border on a filled surface with a hard offset shadow, the signature look.
 // Same export names/props as before so existing screens pick up the sketch style.
 
 import { useEffect, useRef, useState } from "react";

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMicLevel } from "@/lib/useMicLevel";
 import { SketchWaveform } from "./sketch/SketchWaveform";
 
-// Hard cap on a single answer (1:30) — mirrors a typical interview answer length.
+// Hard cap on a single answer (1:30), mirrors a typical interview answer length.
 // The backend enforces the same limit before transcription; this is the UX side.
 const MAX_DURATION_SEC = 90;
 

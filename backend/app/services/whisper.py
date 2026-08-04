@@ -20,7 +20,7 @@ from app.config import settings
 from app.models import WordTimestamp
 
 # Biases Whisper toward transcribing disfluencies verbatim rather than cleaning
-# them up — filler words are the whole point of this app.
+# them up, filler words are the whole point of this app.
 WHISPER_PROMPT = "Transcribe verbatim, including filler words like um, uh, like, and you know."
 
 
@@ -55,7 +55,7 @@ def transcribe_words(audio_path: Path, *, temperature: float = 0.0) -> tuple[lis
         "timestamp_granularities[]": "word",
         "temperature": str(temperature),
         "prompt": WHISPER_PROMPT,
-        # Pin English — interview answers are English, and a hint avoids Whisper
+        # Pin English, interview answers are English, and a hint avoids Whisper
         # occasionally misdetecting the language on short or accented clips.
         "language": "en",
     }

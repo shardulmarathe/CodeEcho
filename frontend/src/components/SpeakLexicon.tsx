@@ -37,7 +37,7 @@ export function SpeakLexicon({
     (t) => [t, m.tag_breakdown?.[t] ?? 0] as const
   ).filter(([, c]) => c > 0);
   const tagMax = Math.max(1, ...tagEntries.map(([, c]) => c));
-  // A few concrete "moments" — fillers the model attributed to a reason.
+  // A few concrete "moments", fillers the model attributed to a reason.
   const moments = session.fillers.filter((f) => f.tag && f.tag_reason).slice(0, 3);
 
   return (

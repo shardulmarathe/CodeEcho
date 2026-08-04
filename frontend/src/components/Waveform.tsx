@@ -1,6 +1,6 @@
 "use client";
 
-// The "echo" signature motif — a row of bars that read as an audio waveform.
+// The "echo" signature motif, a row of bars that read as an audio waveform.
 // `active` animates them (recording / listening); otherwise they sit static.
 
 interface WaveformProps {

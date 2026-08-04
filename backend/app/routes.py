@@ -243,7 +243,7 @@ def _find_audio(attempt_id: str) -> Path:
     audio_files = list(Path(settings.upload_dir).glob(f"{attempt_id}.*"))
     if audio_files:
         return audio_files[0]
-    # Local copy is gone (e.g. ephemeral disk after a restart) — re-fetch the
+    # Local copy is gone (e.g. ephemeral disk after a restart), re-fetch the
     # durable copy from Supabase Storage if it's configured.
     refetched = storage.ensure_local_audio(attempt_id)
     if refetched:
