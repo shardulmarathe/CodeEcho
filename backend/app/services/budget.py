@@ -8,6 +8,12 @@ Two layers of protection, both reset at UTC midnight:
      so one caller can't drain the global cap and lock everyone else out.
      The subject is resolved per request (see ``services/usage.py``).
 
+Either cap can be set to 0 (or negative) to mean UNLIMITED for that scope. The
+per-subject caps ship unlimited: the upstream LLM key has no billing attached, so
+throttling individual users buys nothing that per-IP rate limiting (see
+``services/ratelimit.py``) doesn't already buy. The global cap stays on as a
+circuit breaker against a runaway loop, not as a per-user quota.
+
 Storage:
   - When Supabase is configured (production), spend is tracked DURABLY in the
     ``api_usage_daily`` table (one row per (day, subject)). This is required on
@@ -66,6 +72,11 @@ def _today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def _unlimited(cap: float) -> bool:
+    """A cap of 0 (or negative) disables that scope's limit entirely."""
+    return cap <= 0
+
+
 def _cap_for_subject(subject: str) -> float:
     if subject.startswith("user:"):
         return settings.user_daily_cap_usd
@@ -74,6 +85,11 @@ def _cap_for_subject(subject: str) -> float:
 
 def _status_from_spent(spent: float) -> BudgetStatus:
     cap = settings.api_budget_cap_usd
+    if _unlimited(cap):
+        # cap_usd <= 0 is the wire signal for "no cap"; remaining is meaningless.
+        return BudgetStatus(
+            cap_usd=cap, spent_usd=round(spent, 4), remaining_usd=0.0, budget_exceeded=False
+        )
     return BudgetStatus(
         cap_usd=cap,
         spent_usd=round(spent, 4),
@@ -171,7 +187,9 @@ def check_budget() -> None:
         try:
             client = supabase_client.get_client()
             day = _today()
-            if _sb_spent(client, day, GLOBAL_SUBJECT) >= settings.api_budget_cap_usd:
+            if not _unlimited(settings.api_budget_cap_usd) and (
+                _sb_spent(client, day, GLOBAL_SUBJECT) >= settings.api_budget_cap_usd
+            ):
                 raise BudgetExceededError(
                     f"Daily API budget cap of ${settings.api_budget_cap_usd:.2f} reached "
                     f"for today. Try again tomorrow.",
@@ -179,7 +197,7 @@ def check_budget() -> None:
                 )
             if subject:
                 cap = _cap_for_subject(subject)
-                if _sb_spent(client, day, subject) >= cap:
+                if not _unlimited(cap) and _sb_spent(client, day, subject) >= cap:
                     raise BudgetExceededError(
                         f"Your daily usage limit of ${cap:.2f} has been reached. "
                         f"Try again tomorrow.",
@@ -193,7 +211,9 @@ def check_budget() -> None:
 
     with _lock:
         ledger = _load_ledger_for_today()
-        if ledger["global_spent_usd"] >= settings.api_budget_cap_usd:
+        if not _unlimited(settings.api_budget_cap_usd) and (
+            ledger["global_spent_usd"] >= settings.api_budget_cap_usd
+        ):
             raise BudgetExceededError(
                 f"Daily API budget cap of ${settings.api_budget_cap_usd:.2f} reached "
                 f"for today. Try again tomorrow.",
@@ -201,7 +221,7 @@ def check_budget() -> None:
             )
         if subject:
             cap = _cap_for_subject(subject)
-            if ledger["subjects"].get(subject, 0.0) >= cap:
+            if not _unlimited(cap) and ledger["subjects"].get(subject, 0.0) >= cap:
                 raise BudgetExceededError(
                     f"Your daily usage limit of ${cap:.2f} has been reached. "
                     f"Try again tomorrow.",
@@ -268,6 +288,26 @@ def estimate_gemini_cost(
 ) -> float:
     rates = _text_pricing_for_model(model)
     return (input_tokens / 1000) * rates["input"] + (output_tokens / 1000) * rates["output"]
+
+
+def cost_of_call(result, prompt: str, model: Optional[str] = None) -> float:
+    """Cost of one LLM call, from the provider's own token counts when available.
+
+    ``result`` is an ``llm_client.LLMResult``; its ``output_tokens`` already folds
+    in reasoning tokens, which bill at the output rate.
+
+    Falls back to the historical word-count heuristic only when the provider
+    reported no usage at all. That heuristic is bad in a direction that matters --
+    it cannot see thinking tokens, so a scoring call (pro, 2048-token thinking
+    budget) was undercounted on every single scorecard. Prefer real counts.
+    """
+    input_tokens = getattr(result, "input_tokens", None)
+    output_tokens = getattr(result, "output_tokens", None)
+    if input_tokens is None or output_tokens is None:
+        text = getattr(result, "text", "") or ""
+        input_tokens = int(len(prompt.split()) * 1.3)
+        output_tokens = int(len(text.split()) * 1.3)
+    return estimate_gemini_cost(input_tokens, output_tokens, model=model)
 
 
 def estimate_embedding_cost(tokens: int) -> float:

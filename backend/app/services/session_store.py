@@ -1,12 +1,19 @@
-"""In-memory session store (v1). Replace with Supabase persistence later."""
+"""In-memory live session cache.
+
+The analysis pipeline writes here during streaming; `store.py` reads it before falling
+back to Supabase. Bounded (LRU) so a warm, never-sleeping process cannot grow without
+limit — see `bounded_cache` for why that stopped being self-correcting.
+
+SessionResult is the heaviest cached object (per-word timestamps for a 3-5 minute
+answer), so this bound is much tighter than the metadata caches in `store.py`.
+"""
 
 import uuid
-from threading import Lock
 
 from app.models import SessionResult, SessionStatus
+from app.services.bounded_cache import BoundedCache
 
-_sessions: dict[str, SessionResult] = {}
-_lock = Lock()
+_sessions: BoundedCache[str, SessionResult] = BoundedCache(200)
 
 
 def create_session(title: str = "Untitled Session") -> SessionResult:
@@ -16,22 +23,18 @@ def create_session(title: str = "Untitled Session") -> SessionResult:
         status=SessionStatus.PENDING,
         title=title,
     )
-    with _lock:
-        _sessions[session_id] = session
+    _sessions[session_id] = session
     return session
 
 
 def get_session(session_id: str) -> SessionResult | None:
-    with _lock:
-        return _sessions.get(session_id)
+    return _sessions.get(session_id)
 
 
 def update_session(session: SessionResult) -> SessionResult:
-    with _lock:
-        _sessions[session.session_id] = session
+    _sessions[session.session_id] = session
     return session
 
 
 def list_sessions() -> list[SessionResult]:
-    with _lock:
-        return list(_sessions.values())
+    return _sessions.values()

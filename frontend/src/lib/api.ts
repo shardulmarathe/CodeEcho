@@ -46,22 +46,37 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export interface MeStatus {
   authenticated: boolean;
   user_id: string | null;
-  clerk_configured: boolean;
+  auth_configured: boolean;
+  profile: {
+    user_id: string;
+    email?: string | null;
+    target_role: string;
+    seniority: string;
+  } | null;
 }
 
 export async function getMe(): Promise<MeStatus> {
   return request<MeStatus>("/api/me");
 }
 
+export async function updateMe(body: {
+  target_role?: string;
+  seniority?: string;
+}): Promise<MeStatus["profile"]> {
+  return request<MeStatus["profile"]>("/api/me", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function listAttempts(): Promise<AttemptSummary[]> {
   return request<AttemptSummary[]>("/api/attempts");
 }
 
-export async function claimGuestAttempts(guestToken: string): Promise<{ transferred: number }> {
+export async function claimGuestAttempts(): Promise<{ transferred: number }> {
   return request<{ transferred: number }>("/api/attempts/claim", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ guest_token: guestToken }),
   });
 }
 
@@ -102,6 +117,27 @@ export async function analyzeTextWithGemini(text: string): Promise<GeminiTestRes
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
+}
+
+let warmed = false;
+
+/**
+ * Fire-and-forget wake-up ping for the backend.
+ *
+ * The backend runs on Render's free tier, which spins the container down after 15
+ * minutes idle and takes ~1 minute to come back. Without this the cold start lands on
+ * the user's FIRST real action (generating a question), where it reads as a hang.
+ * Calling this on page load spends that minute while they're reading the intro and
+ * picking a mode instead.
+ *
+ * Deliberately not using `request()`: no auth token is needed to wake a container, and
+ * this must never throw, never block render, and never surface an error to the user.
+ * Once per page load — repeat calls are a no-op.
+ */
+export function warmBackend(): void {
+  if (warmed || typeof window === "undefined") return;
+  warmed = true;
+  void fetch(`${API_URL}/api/health`, { method: "GET", cache: "no-store" }).catch(() => {});
 }
 
 export async function getBudget(): Promise<BudgetStatus> {
@@ -238,8 +274,68 @@ export async function analyzeAttempt(attemptId: string): Promise<SessionResult> 
   });
 }
 
-export function getStreamUrl(attemptId: string): string {
-  return `${API_URL}/api/attempts/${attemptId}/stream`;
+/** Fetch-based SSE so Authorization: Bearer can be sent (EventSource cannot). */
+export async function streamAttempt(
+  attemptId: string,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const headers = new Headers();
+  const token = await getAuthToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const guest = getGuestToken();
+  if (guest) headers.set("X-Guest-Token", guest);
+
+  const res = await fetch(`${API_URL}/api/attempts/${attemptId}/stream`, {
+    headers,
+    signal,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Request failed: ${res.status}`);
+  }
+  if (!res.body) throw new Error("No stream body");
+  await readSse(res.body, onEvent, signal);
+}
+
+async function readSse(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let eventName = "message";
+  try {
+    while (true) {
+      if (signal?.aborted) break;
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop() ?? "";
+      for (const block of parts) {
+        let dataLine = "";
+        eventName = "message";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+        }
+        if (!dataLine) continue;
+        let data: Record<string, unknown> = {};
+        try {
+          data = JSON.parse(dataLine) as Record<string, unknown>;
+        } catch {
+          data = { raw: dataLine };
+        }
+        onEvent(eventName, data);
+        if (eventName === "complete" || eventName === "error") return;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 // --- mock interview ---------------------------------------------------------
@@ -294,13 +390,8 @@ export async function listInterviews(): Promise<InterviewSession[]> {
 }
 
 export function getClipUrl(clipPath: string): string {
-  if (clipPath.startsWith("http")) return clipPath;
+  if (clipPath.startsWith("http://") || clipPath.startsWith("https://")) return clipPath;
   return `${API_URL}${clipPath}`;
-}
-
-export function getAudioUrl(audioPath: string): string {
-  if (audioPath.startsWith("http")) return audioPath;
-  return `${API_URL}${audioPath}`;
 }
 
 export function formatDuration(seconds: number): string {

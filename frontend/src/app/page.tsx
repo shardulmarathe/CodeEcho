@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IntroSequence } from "@/components/IntroSequence";
 import { ModeSelect } from "@/components/ModeSelect";
+import { warmBackend } from "@/lib/api";
 
 export default function Home() {
   const [phase, setPhase] = useState<"intro" | "choose">("intro");
   const [leaving, setLeaving] = useState(false);
+
+  // Start waking the (free-tier, spun-down) backend now, so the ~1 min cold start
+  // overlaps the intro and mode-select instead of the first question generation.
+  useEffect(() => {
+    warmBackend();
+  }, []);
 
   // Fade the intro out, then swap to the mode-select (which rises in via SketchReveal).
   const start = () => {

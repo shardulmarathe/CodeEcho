@@ -31,6 +31,7 @@ class Settings(BaseSettings):
         "azure_openai_whisper_api_key",
         "azure_openai_whisper_deployment",
         "gemini_scoring_model",
+        "supabase_jwt_secret",
         mode="before",
     )
     @classmethod
@@ -38,31 +39,27 @@ class Settings(BaseSettings):
         return str(v or "").strip()
 
     # Budget caps (USD). All reset at UTC midnight (see services/budget.py).
-    # api_budget_cap_usd is the GLOBAL DAILY ceiling on estimated LLM spend across
-    # everyone. The per-subject caps stop one user / guest-IP from draining it:
-    # signed-in users get user_daily_cap_usd, guests/anon get guest_daily_cap_usd.
-    api_budget_cap_usd: float = 3.0
-    user_daily_cap_usd: float = 0.50   # per signed-in Clerk user, per day
-    guest_daily_cap_usd: float = 0.15  # per guest / anonymous IP, per day
+    # Set any of these to 0 to disable that scope's limit entirely.
+    #
+    # The per-subject caps ship DISABLED. The upstream LLM key (Stanford proxy) has no
+    # billing attached and Whisper runs on non-renewing student credit, so throttling an
+    # individual user buys nothing that per-IP rate limiting doesn't already buy — it
+    # just degrades the product for real users. Abuse is handled by rate_limit_expensive.
+    #
+    # api_budget_cap_usd stays ON as a circuit breaker: it bounds a runaway retry loop or
+    # a misconfigured model, not any individual's usage. Raise it rather than zero it.
+    api_budget_cap_usd: float = 25.0
+    user_daily_cap_usd: float = 0.0   # 0 = unlimited per signed-in user
+    guest_daily_cap_usd: float = 0.0  # 0 = unlimited per guest / anonymous IP
 
     # Supabase
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "audio"
 
-    # Clerk auth, backend verifies session JWTs via Clerk's JWKS (RS256).
-    # clerk_issuer is your Clerk Frontend API origin, e.g. https://your-app.clerk.accounts.dev
-    clerk_issuer: str = ""
-    clerk_jwks_url: str = ""  # defaults to {issuer}/.well-known/jwks.json when blank
-    clerk_secret_key: str = ""  # optional, only needed for Clerk Backend API calls
-
-    @property
-    def effective_clerk_jwks_url(self) -> str:
-        if self.clerk_jwks_url:
-            return self.clerk_jwks_url
-        if self.clerk_issuer:
-            return self.clerk_issuer.rstrip("/") + "/.well-known/jwks.json"
-        return ""
+    # Optional. Only needed to verify legacy HS256 tokens. Current Supabase
+    # projects sign with ECC and are verified via JWKS at SUPABASE_URL.
+    supabase_jwt_secret: str = ""
 
     # Rate limiting (slowapi), per client IP
     rate_limit_default: str = "120/minute"
@@ -150,11 +147,9 @@ class Settings(BaseSettings):
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_pool: int = 20  # hybrid candidates fetched before reranking down to kb_top_k
 
-    # Audio limits
-    # Hard cap on a single answer (1:30), mirrors a typical interview answer length
-    # and bounds transcription cost. Enforced in the analysis pipeline before any paid
-    # work; the recorder UI also auto-stops at this limit.
-    max_audio_duration_sec: int = 90
+    # Absolute ceiling on a single answer. Per-attempt cap lives on
+    # SessionResult.max_duration_sec (3 min behavioral/coding, 5 min project/design).
+    max_audio_duration_sec: int = 300
     clip_padding_sec: float = 3.0
 
     # Debug routes (Gemini smoke test). OFF by default, they are unauthenticated and

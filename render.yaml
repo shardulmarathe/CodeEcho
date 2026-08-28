@@ -29,15 +29,23 @@ services:
         sync: false
       - key: AZURE_OPENAI_WHISPER_API_VERSION
         value: "2024-06-01"
+      # Global circuit breaker against a runaway loop — NOT a per-user quota.
+      # Per-subject caps are disabled (0): the Stanford proxy has no billing attached
+      # and Whisper runs on non-renewing student credit, so the only thing per-user
+      # caps did was degrade the product. Abuse is handled by RATE_LIMIT_EXPENSIVE.
       - key: API_BUDGET_CAP_USD
-        value: "3.0"
+        value: "25.0"
+      - key: USER_DAILY_CAP_USD
+        value: "0"
+      - key: GUEST_DAILY_CAP_USD
+        value: "0"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: audio
-      - key: CLERK_ISSUER
+      - key: SUPABASE_JWT_SECRET
         sync: false
       - key: FRONTEND_URL
         sync: false
