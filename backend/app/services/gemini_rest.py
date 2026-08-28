@@ -50,14 +50,37 @@ def generate_text(
     `thinking_budget` > 0 lets the model reason before answering (used by scoring);
     the default 0 keeps the fast, no-thinking behavior for fillers/transitions.
     """
-    text, _ = _generate_content(
+    text, _ = generate_text_with_usage(
+        prompt,
+        temperature=temperature,
+        model=model,
+        thinking_budget=thinking_budget,
+        max_output_tokens=max_output_tokens,
+    )
+    return text
+
+
+def generate_text_with_usage(
+    prompt: str,
+    *,
+    temperature: float = 0.1,
+    model: str | None = None,
+    thinking_budget: int = 0,
+    max_output_tokens: int = 8192,
+) -> tuple[str, dict]:
+    """As ``generate_text``, but also returns Gemini's ``usageMetadata``.
+
+    Budget accounting needs the real counts. ``thoughtsTokenCount`` in particular
+    is billed as output, and scoring runs with a real thinking budget, so
+    estimating from the visible response text alone undercounts every scorecard.
+    """
+    return _generate_content(
         parts=[{"text": prompt}],
         temperature=temperature,
         model=model or settings.gemini_model,
         thinking_budget=thinking_budget,
         max_output_tokens=max_output_tokens,
     )
-    return text
 
 
 def _extract_text_from_response(data: dict) -> tuple[str, dict[str, Any]]:

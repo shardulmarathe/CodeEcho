@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.config import settings
 from app.models import WordTimestamp
-from app.services.budget import check_budget, estimate_gemini_cost, record_cost
-from app.services.llm_client import chat_completion_text, get_provider, is_configured
+from app.services.budget import check_budget, cost_of_call, record_cost
+from app.services.llm_client import chat_completion, get_provider, is_configured
 
 
 def _segment_transcript(words: list[WordTimestamp], segment_duration: float = 45.0) -> list[dict]:
@@ -89,7 +89,8 @@ Respond ONLY with valid JSON in this exact format:
 }}"""
 
         try:
-            text = chat_completion_text(prompt)
+            result = chat_completion(prompt)
+            text = result.text
             json_match = re.search(r"\{.*\}", text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
@@ -97,9 +98,7 @@ Respond ONLY with valid JSON in this exact format:
                     if idx in filler_by_index:
                         transition_indices.add(idx)
 
-            input_tokens = len(prompt.split()) * 1.3
-            output_tokens = len(text.split()) * 1.3
-            cost = estimate_gemini_cost(int(input_tokens), int(output_tokens))
+            cost = cost_of_call(result, prompt)
             record_cost(
                 get_provider().value,
                 f"Transition analysis segment {seg['start']:.0f}s",
@@ -186,7 +185,8 @@ Respond ONLY with valid JSON in this exact format:
 
         out: set[int] = set()
         try:
-            text = chat_completion_text(prompt)
+            result = chat_completion(prompt)
+            text = result.text
             json_match = re.search(r"\{.*\}", text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
@@ -195,9 +195,7 @@ Respond ONLY with valid JSON in this exact format:
                     if idx in candidate_set and idx in seg_word_set:
                         out.add(idx)
 
-            input_tokens = len(prompt.split()) * 1.3
-            output_tokens = len(text.split()) * 1.3
-            cost = estimate_gemini_cost(int(input_tokens), int(output_tokens))
+            cost = cost_of_call(result, prompt)
             record_cost(
                 get_provider().value,
                 f"Discourse-filler disambiguation segment {seg['start']:.0f}s",
@@ -275,7 +273,8 @@ Respond ONLY with valid JSON in this exact format:
 
         seg_tags: dict[int, dict] = {}
         try:
-            text = chat_completion_text(prompt)
+            result = chat_completion(prompt)
+            text = result.text
             json_match = re.search(r"\{.*\}", text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
@@ -293,9 +292,7 @@ Respond ONLY with valid JSON in this exact format:
                         "topic": topic if tag == "topic_mention" and topic else None,
                     }
 
-            input_tokens = len(prompt.split()) * 1.3
-            output_tokens = len(text.split()) * 1.3
-            cost = estimate_gemini_cost(int(input_tokens), int(output_tokens))
+            cost = cost_of_call(result, prompt)
             record_cost(
                 get_provider().value,
                 f"Filler tagging segment {seg['start']:.0f}s",

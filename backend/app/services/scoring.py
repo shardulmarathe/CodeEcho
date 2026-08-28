@@ -26,17 +26,20 @@ from app.services.behavioral import (
     seniority_grading_anchor,
     seniority_note,
 )
-from app.services.budget import check_budget, estimate_gemini_cost, record_cost
+from app.services.budget import check_budget, cost_of_call, record_cost
 from app.config import settings
-from app.services.llm_client import chat_completion_text, get_provider, is_configured
+from app.services.llm_client import LLMResult, chat_completion, get_provider, is_configured
 
 
-def _score_completion(prompt: str) -> str:
+def _score_completion(prompt: str) -> LLMResult:
     """Run a scoring prompt with the dedicated scoring model + a real thinking budget.
 
     Scorecards are reasoning-heavy, so (unlike fillers/transitions) they get the
-    model's thinking pass. Configured via GEMINI_SCORING_* settings."""
-    return chat_completion_text(
+    model's thinking pass. Configured via GEMINI_SCORING_* settings.
+
+    Returns the full LLMResult, not just text: the thinking tokens this enables are
+    billed as output, and they are exactly what a word-count estimate cannot see."""
+    return chat_completion(
         prompt,
         model=settings.effective_scoring_model,
         thinking_budget=settings.gemini_scoring_thinking_budget,
@@ -325,16 +328,15 @@ def score_attempt(
     last_err: Optional[Exception] = None
     for _ in range(2):
         try:
-            text = _score_completion(prompt)
+            result = _score_completion(prompt)
+            text = result.text
             data = _parse_json(text)
             scorecard = _build_scorecard(session.session_id, rubric, data, allowed)
             if not scorecard.dimensions:
                 raise ScoringUnavailable("Scorecard had no dimensions.")
             try:
-                cost = estimate_gemini_cost(
-                    int(len(prompt.split()) * 1.3),
-                    int(len(text.split()) * 1.3),
-                    model=settings.effective_scoring_model,
+                cost = cost_of_call(
+                    result, prompt, model=settings.effective_scoring_model
                 )
                 record_cost(get_provider().value, f"{rubric} scorecard", cost)
             except Exception:
@@ -413,16 +415,15 @@ Respond ONLY with valid JSON:
     last_err: Optional[Exception] = None
     for _ in range(2):
         try:
-            text = _score_completion(prompt)
+            result = _score_completion(prompt)
+            text = result.text
             data = _parse_json(text)
             card = _build_scorecard("interview", rubric_key, data, [n for n, _ in dims])
             if not card.dimensions:
                 raise ScoringUnavailable("No dimensions.")
             try:
-                cost = estimate_gemini_cost(
-                    int(len(prompt.split()) * 1.3),
-                    int(len(text.split()) * 1.3),
-                    model=settings.effective_scoring_model,
+                cost = cost_of_call(
+                    result, prompt, model=settings.effective_scoring_model
                 )
                 record_cost(get_provider().value, f"{rubric_key} interview scorecard", cost)
             except Exception:
@@ -499,13 +500,10 @@ Respond ONLY with valid JSON:
 {{"outline": "<how to structure a strong answer to this question, 2-4 sentences>", "key_points": ["<a specific thing a 5/5 answer covers>", "..."]}}"""
 
     try:
-        text = _score_completion(prompt)
+        result = _score_completion(prompt)
+        text = result.text
         data = _parse_json(text)
-        cost = estimate_gemini_cost(
-            int(len(prompt.split()) * 1.3),
-            int(len(text.split()) * 1.3),
-            model=settings.effective_scoring_model,
-        )
+        cost = cost_of_call(result, prompt, model=settings.effective_scoring_model)
         record_cost(get_provider().value, "model answer", cost)
     except json.JSONDecodeError as exc:
         raise ScoringUnavailable(f"Could not parse model answer: {exc}")

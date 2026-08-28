@@ -7,6 +7,7 @@ import uuid
 from typing import Optional
 
 from app.models import Question, QuestionExample
+from app.services import store
 from app.services.behavioral import (
     BUCKET_KEYS,
     EXPERIENCE_COMPETENCIES,
@@ -16,8 +17,8 @@ from app.services.behavioral import (
     get_technical_track,
     seniority_note,
 )
-from app.services.budget import check_budget, estimate_gemini_cost, record_cost
-from app.services.llm_client import chat_completion_text, get_provider, is_configured
+from app.services.budget import check_budget, cost_of_call, record_cost
+from app.services.llm_client import chat_completion, get_provider, is_configured
 
 # Offline/mock bank, organized by behavioral bucket so mock mode also carries a bucket
 # (and thus the right scoring rubric). Keys match app.services.behavioral.BUCKETS.
@@ -106,10 +107,10 @@ def _parse_json(text: str) -> dict:
         return {}
 
 
-def _record(prompt: str, text: str, label: str) -> None:
+def _record(prompt: str, result, label: str) -> None:
+    """Bill one generation call using the provider's reported tokens."""
     try:
-        cost = estimate_gemini_cost(int(len(prompt.split()) * 1.3), int(len(text.split()) * 1.3))
-        record_cost(get_provider().value, label, cost)
+        record_cost(get_provider().value, label, cost_of_call(result, prompt))
     except Exception:
         pass
 
@@ -140,10 +141,12 @@ def _mock_question(
     track: Optional[str] = None,
     bucket: Optional[str] = None,
     competency: Optional[str] = None,
+    focus: Optional[str] = None,
 ) -> Question:
     meta = {"role": role, "seniority": seniority}
     if topic:
         meta["topic"] = topic
+    explicit_bucket = bucket in BUCKET_KEYS
 
     constraints, examples = (None, [])
     if qtype == "technical" and track in _TECH_TRACK_BANK:
@@ -159,7 +162,7 @@ def _mock_question(
         constraints, examples = _MOCK_TECHNICAL_EXTRAS.get(idx, (None, []))
     else:
         # Behavioral: honor a requested bucket; otherwise pick one at random.
-        bucket = bucket if bucket in BUCKET_KEYS else random.choice(BUCKET_KEYS)
+        bucket = bucket if explicit_bucket else random.choice(BUCKET_KEYS)
         if bucket == "experience":
             competency = (
                 competency
@@ -174,6 +177,8 @@ def _mock_question(
             bank = _BEHAVIORAL_BANK[bucket]
             prompt = bank[hash(qid) % len(bank)]
             meta["bucket"] = bucket
+
+    _apply_focus_meta(meta, focus=focus, explicit_bucket=explicit_bucket, bucket=bucket)
 
     return Question(
         id=qid,
@@ -201,6 +206,86 @@ def _parse_examples(raw) -> list[QuestionExample]:
     return out[:2]
 
 
+# Delivery-style dims are never the generation target. Communication is content
+# only on system_design scorecards; elsewhere it is skipped like Delivery.
+_SKIP_FOCUS_DIMS = frozenset({"Delivery", "Conciseness", "Relevance"})
+_FOCUS_TARGETS: dict[str, dict[str, str]] = {
+    "Situation": {"bucket": "experience"},
+    "Task": {"bucket": "experience"},
+    "Action": {"bucket": "experience"},
+    "Result": {"bucket": "experience"},
+    "Specificity": {"bucket": "experience"},
+    "Self-awareness": {"bucket": "introspection"},
+    "Evidence": {"bucket": "introspection"},
+    "Growth mindset": {"bucket": "introspection"},
+    "Authenticity & motivation": {"bucket": "introspection"},
+    "Understanding": {"bucket": "learning"},
+    "Curiosity & passion": {"bucket": "learning"},
+    "Clarity of explanation": {"bucket": "learning"},
+    "Learning approach": {"bucket": "learning"},
+    "Context": {"track": "project"},
+    "Your contribution": {"track": "project"},
+    "Technical depth": {"track": "project"},
+    "Impact": {"track": "project"},
+    "Requirements & scope": {"track": "system_design"},
+    "High-level design": {"track": "system_design"},
+    "Data model & deep dive": {"track": "system_design"},
+    "Scalability & bottlenecks": {"track": "system_design"},
+    "Trade-offs": {"track": "system_design"},
+    "Communication": {"track": "system_design"},
+    "Problem understanding": {"track": "coding"},
+    "Approach & optimization": {"track": "coding"},
+    "Correctness": {"track": "coding"},
+    "Complexity analysis": {"track": "coding"},
+    "Edge cases": {"track": "coding"},
+}
+
+
+def _apply_focus_meta(
+    meta: dict,
+    *,
+    focus: Optional[str],
+    explicit_bucket: bool,
+    bucket: Optional[str],
+) -> None:
+    if meta.get("focus"):
+        return
+    if focus:
+        meta["focus"] = focus
+    elif explicit_bucket and bucket:
+        meta["focus"] = bucket
+
+
+def pick_focus(identity) -> Optional[dict]:
+    """Choose a generation focus from recent scored attempts.
+
+    Returns None when there are fewer than 3 scored attempts so random bucket
+    selection stays in place for new users. Keys when present:
+    ``bucket``, ``competency``, ``track``, ``dimension``.
+    """
+    scored = [a for a in store.list_attempts(identity) if a.overall_score is not None]
+    if len(scored) < 3:
+        return None
+
+    totals: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for attempt in scored:
+        for dim in attempt.dimensions or []:
+            name = (getattr(dim, "dimension", None) or "").strip()
+            if not name or name in _SKIP_FOCUS_DIMS or name not in _FOCUS_TARGETS:
+                continue
+            if name == "Communication" and getattr(attempt, "bucket", None) != "system_design":
+                continue
+            totals[name] = totals.get(name, 0.0) + float(getattr(dim, "score", 0.0) or 0.0)
+            counts[name] = counts.get(name, 0) + 1
+
+    if not counts:
+        return None
+
+    weakest = min(counts, key=lambda n: (totals[n] / counts[n], n))
+    return {"dimension": weakest, **_FOCUS_TARGETS[weakest]}
+
+
 def generate_question(
     qtype: str = "behavioral",
     role: str = "Software Engineer",
@@ -210,6 +295,7 @@ def generate_question(
     track: Optional[str] = None,
     bucket: Optional[str] = None,
     competency: Optional[str] = None,
+    focus: Optional[str] = None,
 ) -> Question:
     qid = str(uuid.uuid4())
     qtype = "technical" if qtype == "technical" else "behavioral"
@@ -219,16 +305,17 @@ def generate_question(
     else:
         track = None
     tech_track = get_technical_track(track)  # None for coding/behavioral
+    explicit_bucket = bucket in BUCKET_KEYS
 
     if not is_configured():
         return _mock_question(
-            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
         )
     try:
         check_budget()
     except Exception:
         return _mock_question(
-            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
         )
 
     topic_clause = f" focused on {topic}" if topic else ""
@@ -264,7 +351,7 @@ Respond ONLY with valid JSON:
 {{"prompt": "<the problem statement, 1-3 sentences>", "constraints": "<input size, value ranges, edge conditions>", "examples": [{{"input": "<input>", "output": "<expected output>", "explanation": "<one line why>"}}], "topic": "<short topic>", "difficulty": "<easy|medium|hard>"}}"""
     else:
         # Use the requested bucket if given; otherwise pick one at random. Calibrate to seniority.
-        chosen_bucket = bucket if bucket in BUCKET_KEYS else random.choice(BUCKET_KEYS)
+        chosen_bucket = bucket if explicit_bucket else random.choice(BUCKET_KEYS)
         bucket_def = get_bucket(chosen_bucket)
         sn = seniority_note(seniority)
         seniority_clause = f"\n\n{sn}" if sn else ""
@@ -293,12 +380,15 @@ Respond ONLY with valid JSON:
     try:
         # High temperature so repeated generations (same seniority/track) don't collapse
         # onto an identical question, the low default made it return the same one every time.
-        text = chat_completion_text(prompt, temperature=0.9)
+        result = chat_completion(prompt, temperature=0.9)
+        text = result.text
         data = _parse_json(text)
-        _record(prompt, text, "Interview question generation")
+        _record(prompt, result, "Interview question generation")
         q_prompt = (data.get("prompt") or "").strip()
         if not q_prompt:
-            return _mock_question(qid, qtype, role, seniority, difficulty, topic, track)
+            return _mock_question(
+                qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
+            )
         meta = {"role": role, "seniority": seniority}
         if data.get("topic"):
             meta["topic"] = data["topic"]
@@ -308,6 +398,9 @@ Respond ONLY with valid JSON:
             meta["competency"] = chosen_competency
         if track:
             meta["track"] = track
+        _apply_focus_meta(
+            meta, focus=focus, explicit_bucket=explicit_bucket, bucket=chosen_bucket
+        )
         constraints = None
         examples: list[QuestionExample] = []
         if qtype == "technical" and not tech_track:
@@ -327,7 +420,7 @@ Respond ONLY with valid JSON:
         )
     except Exception:
         return _mock_question(
-            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
         )
 
 
@@ -441,9 +534,10 @@ Respond ONLY with valid JSON:
 {{"follow_up": "<the follow-up question, or empty string to move on>"}}"""
 
     try:
-        text = chat_completion_text(prompt)
+        result = chat_completion(prompt)
+        text = result.text
         data = _parse_json(text)
-        _record(prompt, text, "Interview follow-up")
+        _record(prompt, result, "Interview follow-up")
         follow = (data.get("follow_up") or "").strip()
         if not follow:
             return None
@@ -502,9 +596,10 @@ Respond ONLY with valid JSON:
     examples: list[QuestionExample] = []
     try:
         check_budget()
-        text = chat_completion_text(classify_prompt)
+        result = chat_completion(classify_prompt)
+        text = result.text
         data = _parse_json(text)
-        _record(classify_prompt, text, "Question classification")
+        _record(classify_prompt, result, "Question classification")
 
         if data.get("qtype") in ("technical", "behavioral"):
             resolved_qtype = data["qtype"]
