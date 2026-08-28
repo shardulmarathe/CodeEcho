@@ -379,6 +379,17 @@ export async function getInterview(interviewId: string): Promise<InterviewSessio
   return request<InterviewSession>(`/api/interviews/${interviewId}`);
 }
 
+/** The turn a resumed interview should land on.
+ *
+ * Same shape as startInterview/advanceInterview, so the resume path reuses the
+ * caller's ordinary "here is the next question" handling. `done` means every turn
+ * is answered and the report is what's next. Read-only: polling cannot advance. */
+export async function getCurrentInterviewTurn(
+  interviewId: string
+): Promise<InterviewQuestionResponse> {
+  return request<InterviewQuestionResponse>(`/api/interviews/${interviewId}/current`);
+}
+
 export async function getInterviewReport(interviewId: string): Promise<InterviewReport> {
   return request<InterviewReport>(`/api/interviews/${interviewId}/report`, {
     method: "POST",

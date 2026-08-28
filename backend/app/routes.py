@@ -471,6 +471,29 @@ async def get_interview_route(
     return session
 
 
+@router.get("/interviews/{interview_id}/current", response_model=InterviewQuestionResponse)
+async def current_interview_turn_route(
+    interview_id: str, identity: Identity = Depends(get_optional_identity)
+):
+    """The turn a resumed interview should land on.
+
+    Returns the same shape as start/advance, so resuming is the client's ordinary
+    "here is your next question" path rather than a second code path that can drift
+    from it. ``done`` is true once every turn has been answered, which is the signal
+    to go build the report instead.
+
+    Read-only and idempotent: it derives the pending turn from the append-only turns
+    log and never appends one, so polling it cannot advance the interview.
+    """
+    _require_identity(identity)
+    session = store.get_interview(interview_id, identity)
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    turn = interview.pending_turn(session)
+    question = store.get_question(turn.question_id) if turn else None
+    return _interview_response(session, turn, question)
+
+
 @router.post("/interviews/{interview_id}/report", response_model=InterviewReport)
 @limiter.limit(settings.rate_limit_expensive, key_func=expensive_key)
 async def interview_report_route(

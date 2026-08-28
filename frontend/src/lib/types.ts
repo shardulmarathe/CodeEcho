@@ -206,11 +206,22 @@ export interface InterviewTurn {
   answered: boolean;
 }
 
+/** One planned MAIN question. The plan is fixed at start; `plan.length` is the
+ *  denominator in "Question 2 of 3". */
+export interface InterviewMainSpec {
+  qtype: string;
+  track?: string | null;
+  bucket?: string | null;
+  difficulty?: string | null;
+  followup_cap: number;
+}
+
 export interface InterviewSession {
   session_id: string;
   status: string; // active | complete | abandoned
   mode: InterviewMode;
   config: Record<string, unknown>;
+  plan: InterviewMainSpec[];
   turns: InterviewTurn[];
   report?: InterviewReport | null;
   created_at?: string | null;

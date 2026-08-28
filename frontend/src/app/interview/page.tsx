@@ -3,13 +3,19 @@
 import { useCallback, useRef, useState } from "react";
 import { Nav } from "@/components/Nav";
 import { InterviewSetup } from "@/components/InterviewSetup";
+import { InterviewHistory } from "@/components/InterviewHistory";
 import { InterviewSession } from "@/components/InterviewSession";
 import { InterviewReport } from "@/components/InterviewReport";
 import { useAttemptAnalysis } from "@/lib/useAttemptAnalysis";
-import { advanceInterview, getInterviewReport } from "@/lib/api";
+import {
+  advanceInterview,
+  getCurrentInterviewTurn,
+  getInterviewReport,
+} from "@/lib/api";
 import type {
   InterviewQuestionResponse,
   InterviewReport as Report,
+  InterviewSession as Session,
   Question,
 } from "@/lib/types";
 import type { RecordingResult } from "@/components/AudioInput";
@@ -42,7 +48,6 @@ async function advanceWithRetry(
 export default function Interview() {
   const analysis = useAttemptAnalysis();
   const [phase, setPhase] = useState<Phase>("setup");
-  const [interviewId, setInterviewId] = useState<string | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
@@ -67,7 +72,6 @@ export default function Interview() {
   const onStarted = useCallback(
     (r: InterviewQuestionResponse) => {
       interviewIdRef.current = r.session_id;
-      setInterviewId(r.session_id);
       setReport(null);
       setError(null);
       applyNext(r);
@@ -87,6 +91,50 @@ export default function Interview() {
       setBusy(false);
     }
   }, []);
+
+  /** Rejoin an interview that was left unfinished.
+   *
+   * The turn to land on is derived server-side from the append-only log, so this
+   * cannot disagree with where the interview actually is. If every turn turned out
+   * to be answered, the thing that's missing is the report, not a question. */
+  const onResume = useCallback(
+    async (session: Session) => {
+      const id = session.session_id;
+      setBusy(true);
+      setError(null);
+      setReport(null);
+      analysis.reset();
+      pendingAnalysisRef.current = null;
+      interviewIdRef.current = id;
+      try {
+        const next = await getCurrentInterviewTurn(id);
+        if (next.done) {
+          await finishInterview(id);
+          return;
+        }
+        applyNext(next);
+        setPhase("session");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not resume that interview.");
+        interviewIdRef.current = null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [analysis, applyNext, finishInterview]
+  );
+
+  const onViewReport = useCallback(
+    async (session: Session) => {
+      interviewIdRef.current = session.session_id;
+      setError(null);
+      // Clear first, or the previously viewed report flashes while this one loads.
+      setReport(null);
+      setPhase("report");
+      await finishInterview(session.session_id);
+    },
+    [finishInterview]
+  );
 
   const onAnswer = useCallback(
     async ({ blob, liveTranscript }: RecordingResult) => {
@@ -149,7 +197,6 @@ export default function Interview() {
     analysis.reset();
     pendingAnalysisRef.current = null;
     interviewIdRef.current = null;
-    setInterviewId(null);
     setQuestion(null);
     setTurnId(null);
     setProgress("");
@@ -176,8 +223,13 @@ export default function Interview() {
         )}
 
         {phase === "setup" && (
-          <div className="flex-1 flex flex-col justify-center pb-12 w-full">
+          <div className="flex-1 flex flex-col items-center justify-center gap-12 pb-12 w-full">
             <InterviewSetup onStarted={onStarted} />
+            <InterviewHistory
+              onResume={onResume}
+              onViewReport={onViewReport}
+              disabled={busy}
+            />
           </div>
         )}
 
