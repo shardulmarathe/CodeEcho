@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createAttempt,
   getAttempt,
-  getStreamUrl,
+  streamAttempt,
   uploadAudio,
 } from "@/lib/api";
 import type {
@@ -47,14 +47,12 @@ export function useAttemptAnalysis() {
   const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const completedRef = useRef(false);
 
   const closeStream = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
+    abortRef.current?.abort();
+    abortRef.current = null;
   }, []);
 
   useEffect(() => () => closeStream(), [closeStream]);
@@ -96,8 +94,8 @@ export function useAttemptAnalysis() {
       return new Promise((resolve, reject) => {
         completedRef.current = false;
         closeStream();
-        const es = new EventSource(getStreamUrl(sessionId));
-        eventSourceRef.current = es;
+        const ac = new AbortController();
+        abortRef.current = ac;
 
         const handleServerError = (message: string) => {
           if (completedRef.current) return;
@@ -106,80 +104,62 @@ export function useAttemptAnalysis() {
           reject(new Error(message));
         };
 
-        es.addEventListener("status", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          if (data.status) setProcessingStep(data.status);
-          if (data.message) setStatusMessage(data.message);
-        });
-        es.addEventListener("transcript_source", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          setTranscriptSource(data.source || null);
-          if (data.message) setStatusMessage(data.message);
-        });
-        es.addEventListener("transcript_partial", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          setWords(data.words);
-          setTranscriptText(data.transcript_text || "");
-          setTranscriptStreaming(!data.complete);
-          setProcessingStep("transcribing");
-        });
-        es.addEventListener("transcript", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          setWords(data.words);
-          setTranscriptText(data.transcript_text || "");
-          setTranscriptStreaming(false);
-          setProcessingStep("transcribing");
-        });
-        es.addEventListener("fillers", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          setFillers(data.fillers);
-          setProcessingStep("analyzing");
-          setStatusMessage("Computing delivery metrics…");
-        });
-        es.addEventListener("pauses", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          setPauses(data.pauses);
-        });
-        es.addEventListener("metrics", (e) => {
-          const data = JSON.parse((e as MessageEvent).data);
-          setMetrics(data.metrics);
-        });
-        es.addEventListener("complete", async () => {
-          completedRef.current = true;
-          try {
-            await finish(sessionId);
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        });
-        es.addEventListener("error", (e) => {
-          if (completedRef.current) return;
-          try {
-            const data = JSON.parse((e as MessageEvent).data);
-            handleServerError(data.error || "Analysis failed");
-          } catch {
-            // fall through to onerror
-          }
-        });
-        es.onerror = async () => {
-          if (completedRef.current) return;
-          closeStream();
-          try {
-            const result = await getAttempt(sessionId);
-            if (result.status === "complete") {
+        streamAttempt(
+          sessionId,
+          (event, data) => {
+            if (event === "status") {
+              if (typeof data.status === "string") setProcessingStep(data.status as ProcessingStep);
+              if (typeof data.message === "string") setStatusMessage(data.message);
+            } else if (event === "transcript_source") {
+              setTranscriptSource((data.source as string) || null);
+              if (typeof data.message === "string") setStatusMessage(data.message);
+            } else if (event === "transcript_partial") {
+              setWords(data.words as WordTimestamp[]);
+              setTranscriptText((data.transcript_text as string) || "");
+              setTranscriptStreaming(!data.complete);
+              setProcessingStep("transcribing");
+            } else if (event === "transcript") {
+              setWords(data.words as WordTimestamp[]);
+              setTranscriptText((data.transcript_text as string) || "");
+              setTranscriptStreaming(false);
+              setProcessingStep("transcribing");
+            } else if (event === "fillers") {
+              setFillers(data.fillers as FillerOccurrence[]);
+              setProcessingStep("analyzing");
+              setStatusMessage("Computing delivery metrics…");
+            } else if (event === "pauses") {
+              setPauses(data.pauses as PauseOccurrence[]);
+            } else if (event === "metrics") {
+              setMetrics(data.metrics as SessionMetrics);
+            } else if (event === "complete") {
               completedRef.current = true;
-              await finish(sessionId);
-              resolve();
-            } else if (result.status === "failed") {
-              reject(new Error(result.error || "Analysis failed"));
-            } else {
-              reject(new Error("Analysis was interrupted. Please try again."));
+              finish(sessionId).then(() => resolve()).catch(reject);
+            } else if (event === "error") {
+              handleServerError((data.error as string) || "Analysis failed");
             }
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error("Analysis failed"));
-          }
-        };
+          },
+          ac.signal
+        )
+          .then(async () => {
+            if (completedRef.current) return;
+            closeStream();
+            try {
+              const result = await getAttempt(sessionId);
+              if (result.status === "complete") {
+                completedRef.current = true;
+                await finish(sessionId);
+                resolve();
+              } else if (result.status === "failed") {
+                reject(new Error(result.error || "Analysis failed"));
+              }
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error("Analysis failed"));
+            }
+          })
+          .catch((err) => {
+            if (ac.signal.aborted || completedRef.current) return;
+            handleServerError(err instanceof Error ? err.message : "Analysis failed");
+          });
       });
     },
     [closeStream, finish]

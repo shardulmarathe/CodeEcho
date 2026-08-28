@@ -72,7 +72,7 @@ class SessionResult(BaseModel):
     session_id: str  # == attempts.id
     status: SessionStatus
     title: str = "Untitled Session"
-    # Ownership: a logged-in Clerk user OR an anonymous guest token (exactly one set)
+    # Ownership: a signed-in user OR an anonymous guest token (exactly one set)
     user_id: Optional[str] = None
     guest_token: Optional[str] = None
     question_id: Optional[str] = None
@@ -83,12 +83,22 @@ class SessionResult(BaseModel):
     transcript_text: str = ""
     live_transcript: Optional[str] = None
     audio_url: Optional[str] = None
+    audio_path: Optional[str] = None  # storage object key, not a signed URL
     created_at: Optional[str] = None
     error: Optional[str] = None
+    # Recording budget for this attempt (seconds). 180 behavioral/coding, 300 design/project.
+    max_duration_sec: Optional[int] = None
+
+
+class DimensionScore(BaseModel):
+    """Score-only slice of a rubric dimension, for history listings."""
+
+    dimension: str
+    score: float = 0.0
 
 
 class AttemptSummary(BaseModel):
-    """Lightweight row for history listings."""
+    """Lightweight row for history listings and the progress dashboard."""
 
     session_id: str
     title: str
@@ -96,6 +106,13 @@ class AttemptSummary(BaseModel):
     created_at: Optional[str] = None
     total_fillers: int = 0
     duration_sec: float = 0.0
+    fillers_per_minute: float = 0.0
+    words_per_minute: float = 0.0
+    overall_score: Optional[float] = None
+    dimensions: list[DimensionScore] = Field(default_factory=list)
+    bucket: Optional[str] = None  # behavioral bucket or technical track
+    qtype: Optional[str] = None
+    rubric: Optional[str] = None
 
 
 class BudgetStatus(BaseModel):
@@ -103,6 +120,18 @@ class BudgetStatus(BaseModel):
     spent_usd: float
     remaining_usd: float
     budget_exceeded: bool
+
+
+class Profile(BaseModel):
+    user_id: str
+    email: Optional[str] = None
+    target_role: str = "Software Engineer"
+    seniority: str = "mid"
+
+
+class ProfileUpdate(BaseModel):
+    target_role: Optional[str] = None
+    seniority: Optional[str] = None
 
 
 # --- Interview questions & scorecards ---------------------------------------
@@ -121,6 +150,7 @@ class Question(BaseModel):
     constraints: Optional[str] = None  # technical: input size, ranges, edge conditions
     examples: list[QuestionExample] = Field(default_factory=list)  # technical: worked I/O
     meta: dict = Field(default_factory=dict)  # role, seniority, difficulty, topic
+    owner_user_id: Optional[str] = None
     created_at: Optional[str] = None
 
 
@@ -182,6 +212,7 @@ class InterviewMainSpec(BaseModel):
     competency: Optional[str] = None  # experience bucket only
     difficulty: Optional[str] = None  # coding: easy | medium | hard
     followup_cap: int = 2
+    focus: Optional[str] = None  # weakest content dimension; copied to question.meta.focus
 
 
 class InterviewTurn(BaseModel):
@@ -282,3 +313,18 @@ class KBDocument(BaseModel):
     embedding: list[float] = Field(default_factory=list)  # 768-dim; omitted in API responses
     meta: dict = Field(default_factory=dict)  # source, bucket, chunk index
     created_at: Optional[str] = None
+
+
+# Recording budgets. Behavioral and coding answers: 3 min. Project / system design: 5 min.
+ANSWER_CAP_BEHAVIORAL_SEC = 180
+ANSWER_CAP_CODING_SEC = 180
+ANSWER_CAP_DESIGN_SEC = 300
+
+
+def answer_cap_sec(qtype: Optional[str] = None, track: Optional[str] = None) -> int:
+    """Seconds allowed for one spoken answer, from question type and technical track."""
+    if track in ("system_design", "project"):
+        return ANSWER_CAP_DESIGN_SEC
+    if qtype == "technical":
+        return ANSWER_CAP_CODING_SEC
+    return ANSWER_CAP_BEHAVIORAL_SEC

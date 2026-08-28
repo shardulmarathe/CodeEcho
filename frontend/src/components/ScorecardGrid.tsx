@@ -1,8 +1,9 @@
 "use client";
 
-import type { Scorecard } from "@/lib/types";
+import type { FillerOccurrence, PauseOccurrence, Scorecard, WordTimestamp } from "@/lib/types";
 import { SketchBox } from "@/components/sketch/Sketch";
 import { Doodle } from "@/components/sketch/Doodle";
+import { TranscriptView } from "@/components/TranscriptView";
 
 function scoreColor(score: number): string {
   return score >= 3.5 ? "var(--echo)" : "var(--amber)";
@@ -22,9 +23,16 @@ const RUBRIC_LABELS: Record<string, string> = {
 export function ScorecardGrid({
   scorecard,
   footer,
+  transcript,
 }: {
   scorecard: Scorecard;
   footer?: React.ReactNode;
+  transcript?: {
+    words: WordTimestamp[];
+    transcriptText?: string;
+    pauses?: PauseOccurrence[];
+    fillers?: FillerOccurrence[];
+  };
 }) {
   const tilts = ["l", "r", null] as const;
   return (
@@ -77,6 +85,18 @@ export function ScorecardGrid({
           </SketchBox>
         ))}
       </div>
+
+      {transcript && (
+        <TranscriptView
+          words={transcript.words}
+          fillerIndices={new Set((transcript.fillers ?? []).map((f) => f.index))}
+          fillers={transcript.fillers}
+          pauses={transcript.pauses}
+          transcriptText={transcript.transcriptText}
+          evidenceQuotes={scorecard.dimensions.map((d) => d.evidence).filter((e) => e.trim())}
+          label="Transcript"
+        />
+      )}
 
       {footer && <div className="pt-2">{footer}</div>}
     </div>

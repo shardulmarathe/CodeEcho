@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.models import FillerOccurrence
+from app.services import storage
 
 
 def _ffmpeg_available() -> bool:
@@ -51,7 +52,8 @@ def generate_clip(
             check=True,
             timeout=30,
         )
-        return f"/clips/{clip_name}"
+        storage.save_clip(clip_path)
+        return storage.clip_url(clip_name)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
 

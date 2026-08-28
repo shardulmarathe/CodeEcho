@@ -4,10 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useMicLevel } from "@/lib/useMicLevel";
 import { SketchWaveform } from "./sketch/SketchWaveform";
 
-// Hard cap on a single answer (1:30), mirrors a typical interview answer length.
-// The backend enforces the same limit before transcription; this is the UX side.
-const MAX_DURATION_SEC = 90;
-
 export interface RecordingResult {
   blob: Blob;
   liveTranscript: string;
@@ -16,6 +12,8 @@ export interface RecordingResult {
 interface AudioRecorderProps {
   onRecordingComplete: (result: RecordingResult) => void;
   disabled?: boolean;
+  /** Per-question answer cap in seconds. Defaults to 180 (behavioral/coding). Pass 300 for project/system design. */
+  maxDurationSec?: number;
 }
 
 function getSupportedMimeType(): string {
@@ -48,7 +46,7 @@ async function getMicStream(): Promise<MediaStream> {
   }
 }
 
-export function AudioRecorder({ onRecordingComplete, disabled }: AudioRecorderProps) {
+export function AudioRecorder({ onRecordingComplete, disabled, maxDurationSec = 180 }: AudioRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [speechDetected, setSpeechDetected] = useState(false);
@@ -159,14 +157,14 @@ export function AudioRecorder({ onRecordingComplete, disabled }: AudioRecorderPr
     }
   }, [recording, level]);
 
-  // Enforce the answer cap: auto-stop at 1:30, like an interviewer calling time.
+  // Enforce the answer cap: auto-stop when the per-question limit is reached.
   useEffect(() => {
-    if (recording && duration >= MAX_DURATION_SEC) {
+    if (recording && duration >= maxDurationSec) {
       stopRecording();
     }
     // stopRecording only touches refs, so it's safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording, duration]);
+  }, [recording, duration, maxDurationSec]);
 
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
@@ -176,15 +174,15 @@ export function AudioRecorder({ onRecordingComplete, disabled }: AudioRecorderPr
       <SketchWaveform bars={40} active={recording} height={56} />
       <div className="text-center">
         <p className="text-3xl font-bold tabular-nums mono">
-          {formatTime(Math.min(duration, MAX_DURATION_SEC))}
-          <span className="text-muted text-lg font-normal"> / {formatTime(MAX_DURATION_SEC)}</span>
+          {formatTime(Math.min(duration, maxDurationSec))}
+          <span className="text-muted text-lg font-normal"> / {formatTime(maxDurationSec)}</span>
         </p>
         <p className="text-sm text-muted mt-1">
           {recording
-            ? MAX_DURATION_SEC - duration <= 15
-              ? `${Math.max(0, MAX_DURATION_SEC - duration)}s left — wrap up your answer`
+            ? maxDurationSec - duration <= 15
+              ? `${Math.max(0, maxDurationSec - duration)}s left — wrap up your answer`
               : "Recording — speak clearly into your mic"
-            : "Tap to record your answer · 1:30 max"}
+            : `Tap to record your answer · ${formatTime(maxDurationSec)} max`}
         </p>
       </div>
       {micError && !recording && (

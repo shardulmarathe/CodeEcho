@@ -43,15 +43,17 @@ own and the model classifies its type, track and bucket.
 - **Speech-to-text**. Azure OpenAI Whisper, preferred for its native word-level
   timestamps. Falls back to mock data when no key is present, so the app runs
   offline.
-- **Auth**. Clerk, with the backend verifying session JWTs via JWKS/RS256.
-  Guest mode with claim-on-signup.
+- **Auth**. Supabase Auth. The browser sends `Authorization: Bearer <access_token>`;
+  FastAPI verifies tokens via JWKS at `{SUPABASE_URL}/auth/v1/.well-known/jwks.json` (ECC) or `SUPABASE_JWT_SECRET` (legacy HS256). Guests send `X-Guest-Token`.
+  FastAPI is the PEP: Postgres is queried with the service-role key, scoped by
+  `store._owns`. RLS stays default-deny so the anon key cannot hit tables.
 - **Audio**. FFmpeg, for filler-clip generation.
 
 ## Repo layout
 
 ```
 frontend/                 Next.js app (Vercel)
-  src/app/                routes: /, /interview, /practice, /test
+  src/app/                routes: /, /interview, /practice, /progress, /sign-in, /account
   src/components/         InterviewSession, ProblemPanel, ScorecardGrid, sketch/*
   src/lib/                api client, useAttemptAnalysis, types, identity
 backend/                  FastAPI (Render)

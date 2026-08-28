@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -60,10 +59,12 @@ if settings.enable_debug_routes:
 
     app.include_router(debug_router, prefix="/api")
 
-# Ensure local media dirs exist. Audio is served via the guarded /api/audio route
-# (or Supabase signed URLs in prod); filler clips via the /clips mount used by the
-# timeline player. The raw uploads dir is NOT mounted, it held every user's full
-# recordings with no path guard.
+# Ensure local media dirs exist. Audio is served via the guarded GET /api/audio
+# route (or Supabase signed URLs in prod). The public StaticFiles mount at /clips
+# is gone: it served filler clips with no identity check, so any client who
+# guessed a filename could read another user's audio. Clips are now served only
+# by the identity-gated GET /api/clips/{filename} route in routes.py. The raw
+# uploads dir is also not mounted — it held every user's full recordings with
+# no path guard.
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
 Path(settings.clips_dir).mkdir(parents=True, exist_ok=True)
-app.mount("/clips", StaticFiles(directory=settings.clips_dir), name="clips_static")

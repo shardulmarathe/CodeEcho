@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Space_Grotesk, JetBrains_Mono, Kalam, Patrick_Hand } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { AuthBridge } from "@/components/auth/AuthControls";
 import "./globals.css";
@@ -29,7 +28,9 @@ const handBody = Patrick_Hand({
   weight: ["400"],
 });
 
-const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const authEnabled = !!(
+  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // Canonical site URL: explicit override → Vercel's production URL → localhost.
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
@@ -78,11 +79,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
-        {clerkEnabled && <AuthBridge />}
+        {authEnabled && <AuthBridge />}
         <Analytics />
       </body>
     </html>
   );
 
-  return clerkEnabled ? <ClerkProvider>{tree}</ClerkProvider> : tree;
+  return tree;
 }

@@ -13,7 +13,7 @@ from app.services.analytics import compute_metrics
 from app.services.audio_utils import AudioValidationError
 
 # Allow a few seconds of slack over the hard cap so a recording that stops a beat
-# late (client timer vs. actual encoded length) isn't rejected for being ~90.3s.
+# late (client timer vs. actual encoded length) isn't rejected for being ~180.3s.
 ANSWER_CAP_GRACE_SEC = 5
 from app.services.budget import BudgetExceededError
 from app.services.filler_detect import (
@@ -29,6 +29,7 @@ from app.services.transition import classify_discourse_fillers, tag_fillers
 from app.services.audio_utils import effective_duration_sec
 from app.services.llm_client import is_configured
 from app.services.session_store import update_session, get_session
+from app.services import store
 from app.services.transcribe import transcribe_audio, transcribe_audio_mock
 
 
@@ -57,7 +58,8 @@ async def run_analysis_pipeline(
         # Hard cap on answer length. The recorder auto-stops at the cap; this is the
         # server-side backstop for uploaded files or a bypassed client. Reject BEFORE
         # transcription so an over-long answer never incurs LLM/transcription cost.
-        cap = settings.max_audio_duration_sec
+        cap = int(session.max_duration_sec or 180)
+        cap = min(cap, settings.max_audio_duration_sec)
         if audio_duration > cap + ANSWER_CAP_GRACE_SEC:
             mins, secs = divmod(cap, 60)
             raise AudioValidationError(
@@ -250,12 +252,14 @@ async def run_analysis_pipeline(
         session.status = SessionStatus.COMPLETE
         update_session(session)
         emit("complete", {"session_id": session.session_id})
+        store.persist_attempt_results(session)
 
     except BudgetExceededError as e:
         session.status = SessionStatus.FAILED
         session.error = str(e)
         update_session(session)
         emit("error", {"error": str(e)})
+        store.persist_attempt_results(session)
     except AudioValidationError as e:
         # Safe, user-facing message (silent/too-short/too-quiet audio), surface it so
         # the user knows to re-record, rather than a generic failure.
@@ -263,6 +267,7 @@ async def run_analysis_pipeline(
         session.error = str(e)
         update_session(session)
         emit("error", {"error": str(e)})
+        store.persist_attempt_results(session)
     except Exception:
         # Log the full detail server-side; never return raw exception text to the
         # client (it can carry internal paths, request URLs, or credentials).
@@ -272,5 +277,6 @@ async def run_analysis_pipeline(
         session.error = generic
         update_session(session)
         emit("error", {"error": generic})
+        store.persist_attempt_results(session)
 
     return session

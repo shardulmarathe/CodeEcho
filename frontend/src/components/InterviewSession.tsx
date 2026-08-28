@@ -1,6 +1,7 @@
 "use client";
 
 import type { Question } from "@/lib/types";
+import { recordingCapSec } from "@/lib/types";
 import { AudioRecorder } from "@/components/AudioInput";
 import type { RecordingResult } from "@/components/AudioInput";
 import { ProblemPanel } from "@/components/ProblemPanel";
@@ -51,7 +52,11 @@ export function InterviewSession({
           <p className="text-xs text-muted">The interviewer is listening — next question in a moment.</p>
         </div>
       ) : (
-        <AudioRecorder onRecordingComplete={onAnswer} disabled={busy} />
+        <AudioRecorder
+          onRecordingComplete={onAnswer}
+          disabled={busy}
+          maxDurationSec={recordingCapSec(question)}
+        />
       )}
       {error && (
         <p className="text-sm text-center" style={{ color: "#f87171" }}>

@@ -71,6 +71,7 @@ export function ResultsDashboard({ session, onNewSession }: ResultsDashboardProp
           <Timeline
             durationSec={session.metrics.duration_sec}
             fillers={session.fillers}
+            pauses={session.pauses}
           />
           <TranscriptView
             words={session.words}

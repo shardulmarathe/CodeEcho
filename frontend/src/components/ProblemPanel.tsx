@@ -4,8 +4,11 @@ import type { Question } from "@/lib/types";
 
 export function ProblemPanel({ question }: { question: Question }) {
   const isTech = question.qtype === "technical";
+  const focus =
+    typeof question.meta?.focus === "string" ? question.meta.focus : null;
   return (
     <div className="panel p-5 space-y-4">
+      {focus && <p className="eyebrow">focus · {focus}</p>}
       <p className="font-medium text-base sm:text-lg leading-relaxed break-words">{question.prompt}</p>
 
       {isTech && question.constraints && (

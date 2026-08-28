@@ -14,7 +14,6 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
@@ -28,16 +27,18 @@ from app.models import (
     InterviewReport,
     InterviewSession,
     ModelAnswer,
+    Profile,
+    ProfileUpdate,
     Question,
     Scorecard,
     ScoreRequest,
     SessionResult,
     StartInterviewRequest,
 )
-from app.services import guests, interview, questions, session_store, storage, store, usage
+from app.services import guests, interview, questions, session_store, storage, store
 from app.services.auth import (
     Identity,
-    clerk_configured,
+    auth_configured,
     get_current_user,
     get_optional_identity,
 )
@@ -83,18 +84,43 @@ async def health():
         "rerank_enabled": settings.rerank_enabled,
         "ffmpeg_available": bool(shutil.which("ffmpeg")),
         "google_gemini_base_url": settings.google_gemini_base_url or None,
-        "clerk_configured": clerk_configured(),
+        "auth_configured": auth_configured(),
         "supabase_configured": supabase_configured(),
     }
 
 
 @router.get("/me")
 async def me(identity: Identity = Depends(get_optional_identity)):
+    if not identity.is_user:
+        return {
+            "authenticated": False,
+            "user_id": None,
+            "auth_configured": auth_configured(),
+            "profile": None,
+        }
+    profile = store.get_profile(identity.user_id) or store.upsert_profile(identity.user_id)
+    data = profile.model_dump()
+    data["email"] = identity.email
     return {
-        "authenticated": identity.is_user,
+        "authenticated": True,
         "user_id": identity.user_id,
-        "clerk_configured": clerk_configured(),
+        "auth_configured": auth_configured(),
+        "profile": data,
     }
+
+
+@router.put("/me", response_model=Profile)
+async def update_me(
+    body: ProfileUpdate,
+    identity: Identity = Depends(get_optional_identity),
+):
+    if not identity.is_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return store.upsert_profile(
+        identity.user_id,
+        target_role=body.target_role,
+        seniority=body.seniority,
+    )
 
 
 @router.get("/budget", response_model=BudgetStatus)
@@ -112,6 +138,7 @@ async def generate_interview_question(
     identity: Identity = Depends(get_optional_identity),
 ):
     _require_identity(identity)
+    focus = questions.pick_focus(identity) or {}
     q = questions.generate_question(
         qtype=body.qtype,
         role=body.role,
@@ -119,8 +146,15 @@ async def generate_interview_question(
         difficulty=body.difficulty,
         topic=body.topic,
         track=body.track,
+        bucket=focus.get("bucket") if body.qtype != "technical" else None,
+        competency=focus.get("competency") if body.qtype != "technical" else None,
+        focus=focus.get("dimension"),
     )
-    return store.create_question(q, owner_user_id=identity.user_id)
+    if focus.get("dimension"):
+        q.meta["focus"] = focus["dimension"]
+    return store.create_question(
+        q, owner_user_id=identity.user_id, guest_token=identity.guest_token
+    )
 
 
 @router.post("/questions", response_model=Question)
@@ -133,13 +167,16 @@ async def submit_custom_question(
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="Question prompt is required.")
     q = questions.custom_question(body.qtype, body.prompt, body.meta)
-    return store.create_question(q, owner_user_id=identity.user_id)
+    return store.create_question(
+        q, owner_user_id=identity.user_id, guest_token=identity.guest_token
+    )
 
 
 @router.get("/questions/{question_id}", response_model=Question)
-async def get_question(question_id: str):
+async def get_question(question_id: str, identity: Identity = Depends(get_optional_identity)):
+    _require_identity(identity)
     q = store.get_question(question_id)
-    if not q:
+    if not q or not _can_read_question(q, identity):
         raise HTTPException(status_code=404, detail="Question not found")
     return q
 
@@ -152,6 +189,18 @@ def _require_identity(identity: Identity) -> None:
             status_code=400,
             detail="Missing identity. Sign in or send an X-Guest-Token header.",
         )
+
+
+def _can_read_question(question: Question, identity: Identity) -> bool:
+    """Bank/global questions (no owner) are readable by any identified caller.
+    User-owned rows require that user. Guest-stamped rows require that guest.
+    """
+    if question.owner_user_id:
+        return question.owner_user_id == identity.user_id
+    guest_owner = (question.meta or {}).get("_guest_token")
+    if guest_owner:
+        return guest_owner == identity.guest_token
+    return True
 
 
 @router.post("/attempts", response_model=SessionResult)
@@ -182,16 +231,15 @@ async def get_attempt(attempt_id: str, identity: Identity = Depends(get_optional
     return session
 
 
-class ClaimBody(BaseModel):
-    guest_token: str
-
-
 @router.post("/attempts/claim")
-async def claim_attempts(
-    request: Request, body: ClaimBody, user_id: str = Depends(get_current_user)
-):
-    """Transfer a guest's prior attempts to the now-authenticated user."""
-    transferred = guests.claim(user_id, body.guest_token)
+async def claim_attempts(request: Request, user_id: str = Depends(get_current_user)):
+    """Transfer this request's guest attempts to the signed-in user.
+
+    The guest token comes from the X-Guest-Token header (already attached by the
+    API client), never from a caller-chosen body field.
+    """
+    guest = (request.headers.get("x-guest-token") or "").strip()
+    transferred = guests.claim(user_id, guest) if guest else 0
     return {"transferred": transferred}
 
 
@@ -227,9 +275,10 @@ async def upload_audio(
         raise HTTPException(
             status_code=413,
             detail=f"Audio is too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB). "
-            "Answers are capped at 1:30 — record a shorter response.",
+            "Record a shorter response.",
         )
     _, storage_key = storage.save_audio(attempt_id, content, ext)
+    session.audio_path = storage_key
     session.audio_url = storage.audio_url(storage_key)
 
     cleaned_live = live_transcript.strip()
@@ -253,15 +302,19 @@ def _find_audio(attempt_id: str) -> Path:
 
 @router.post("/attempts/{attempt_id}/analyze", response_model=SessionResult)
 @limiter.limit(settings.rate_limit_expensive, key_func=expensive_key)
-async def analyze_attempt(request: Request, attempt_id: str):
-    usage.set_subject(usage.ip_subject(request))  # capability-style: bill against IP
-    session = session_store.get_session(attempt_id)
+async def analyze_attempt(
+    request: Request,
+    attempt_id: str,
+    identity: Identity = Depends(get_optional_identity),
+):
+    _require_identity(identity)
+    session = store.get_attempt(attempt_id, identity)
     if not session:
         raise HTTPException(status_code=404, detail="Attempt not found")
+    session_store.update_session(session)
     audio_path = _find_audio(attempt_id)
-    session = await run_analysis_pipeline(session, audio_path)
-    store.persist_attempt_results(session)
-    return session
+    # Pipeline persists on COMPLETE/FAILED so a client disconnect cannot drop the row.
+    return await run_analysis_pipeline(session, audio_path)
 
 
 def _attempt_question(attempt_id: str, identity: Identity):
@@ -434,13 +487,16 @@ async def interview_report_route(
 
 @router.get("/attempts/{attempt_id}/stream")
 @limiter.limit(settings.rate_limit_expensive, key_func=expensive_key)
-async def stream_analysis(request: Request, attempt_id: str):
-    # Capability-style: the unguessable attempt id authorizes the stream (quota +
-    # ownership were enforced at create/upload). EventSource cannot send headers.
-    usage.set_subject(usage.ip_subject(request))  # bill against IP
-    session = session_store.get_session(attempt_id)
+async def stream_analysis(
+    request: Request,
+    attempt_id: str,
+    identity: Identity = Depends(get_optional_identity),
+):
+    _require_identity(identity)
+    session = store.get_attempt(attempt_id, identity)
     if not session:
         raise HTTPException(status_code=404, detail="Attempt not found")
+    session_store.update_session(session)
     audio_path = _find_audio(attempt_id)
     event_queue: asyncio.Queue = asyncio.Queue()
 
@@ -472,7 +528,6 @@ async def stream_analysis(request: Request, attempt_id: str):
                 task.cancel()
             else:
                 await task
-                store.persist_attempt_results(session)
 
     return EventSourceResponse(event_generator())
 
@@ -495,10 +550,33 @@ def _safe_media_path(directory: str, filename: str) -> Path:
 
 
 @router.get("/audio/{filename}")
-async def serve_audio(filename: str):
+async def serve_audio(
+    filename: str,
+    request: Request,
+    identity: Identity = Depends(get_optional_identity),
+):
+    if not storage.verify_media_sig(
+        filename, request.query_params.get("exp"), request.query_params.get("sig")
+    ):
+        _require_identity(identity)
+        attempt_id = Path(filename).stem
+        if not store.get_attempt(attempt_id, identity):
+            raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(_safe_media_path(settings.upload_dir, filename))
 
 
 @router.get("/clips/{filename}")
-async def serve_clip(filename: str):
+async def serve_clip(
+    filename: str,
+    request: Request,
+    identity: Identity = Depends(get_optional_identity),
+):
+    if not storage.verify_media_sig(
+        filename, request.query_params.get("exp"), request.query_params.get("sig")
+    ):
+        _require_identity(identity)
+        stem = Path(filename).stem
+        attempt_id = stem.rsplit("_", 1)[0] if "_" in stem else stem
+        if not store.get_attempt(attempt_id, identity):
+            raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(_safe_media_path(settings.clips_dir, filename))

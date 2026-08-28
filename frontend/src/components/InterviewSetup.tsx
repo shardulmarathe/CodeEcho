@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { startInterview } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { getMe, startInterview } from "@/lib/api";
 import type {
   InterviewMode,
   InterviewQuestionResponse,
@@ -35,8 +35,18 @@ export function InterviewSetup({
   const [mode, setMode] = useState<InterviewMode | null>(null);
   const [section, setSection] = useState<TechnicalSection | null>(null);
   const [seniority, setSeniority] = useState<string | null>(null);
+  const [role, setRole] = useState("Software Engineer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then((me) => {
+        if (me.profile?.seniority) setSeniority(me.profile.seniority);
+        if (me.profile?.target_role) setRole(me.profile.target_role);
+      })
+      .catch(() => {});
+  }, []);
 
   const ready = mode && seniority && (mode !== "technical" || section);
 
@@ -48,7 +58,7 @@ export function InterviewSetup({
       const r = await startInterview({
         mode,
         section: mode === "technical" ? section ?? "coding" : undefined,
-        role: "Software Engineer",
+        role,
         seniority: seniority!,
         num_behavioral: 3,
       });

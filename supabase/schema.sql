@@ -1,12 +1,12 @@
 -- CodeEcho / SWE Interview Prep — Supabase schema
--- Auth is handled by CLERK; user_id columns store Clerk user ids (TEXT, e.g. 'user_2ab...').
--- Run this in the Supabase SQL editor. pgvector is used for RAG (Phase 3).
+-- Auth is Supabase Auth. user_id columns store auth.users.id as TEXT (UUIDs fit).
+-- Run this in the Supabase SQL editor. pgvector is used for RAG.
 
 create extension if not exists vector;
 
 -- Per-user interview context (Phase 1 minimal; resume_text feeds future RAG)
 create table if not exists profiles (
-    user_id text primary key,                 -- Clerk user id
+    user_id text primary key,                 -- auth.users.id as text
     target_role text,
     seniority text,
     resume_text text,
@@ -39,7 +39,7 @@ create table if not exists questions (
 -- An answer attempt (one recording). Owned by a user OR a guest.
 create table if not exists attempts (
     id uuid primary key default gen_random_uuid(),
-    user_id text,                             -- Clerk user id; null for guest
+    user_id text,                             -- auth.users.id; null for guest
     guest_token text,                         -- set for guest attempts; null after claim
     question_id uuid references questions(id) on delete set null,
     title text not null default 'Untitled Attempt',
@@ -51,6 +51,8 @@ create table if not exists attempts (
     updated_at timestamptz default now(),
     constraint attempts_owner_chk check (user_id is not null or guest_token is not null)
 );
+-- Per-attempt recording budget (3 min behavioral/coding, 5 min project/design).
+alter table attempts add column if not exists max_duration_sec int;
 
 -- Delivery metrics (filler/pace/pause analysis) — one row per attempt
 create table if not exists delivery_metrics (
@@ -121,7 +123,7 @@ create table if not exists scorecards (
 -- append-only turns log. Heavy per-turn data lives in attempts/scorecards.
 create table if not exists interview_sessions (
     id uuid primary key default gen_random_uuid(),
-    user_id text,                             -- Clerk user id; null for guest
+    user_id text,                             -- auth.users.id; null for guest
     guest_token text,                         -- set for guest sessions
     mode text not null,                       -- 'behavioral' | 'technical'
     status text not null default 'active',    -- 'active' | 'complete' | 'abandoned'
@@ -282,12 +284,31 @@ language sql stable as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- New-user profile row. auth.users.id is a uuid; profiles.user_id is text so
+-- existing guest-era rows stay valid. The function is security definer so the
+-- auth admin can insert into public.profiles.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (user_id)
+  values (new.id::text)
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ---------------------------------------------------------------------------
 -- RLS note: The FastAPI backend is the ONLY Supabase client. It holds the
--- service-role key (which bypasses RLS) and Clerk—not Supabase Auth—issues
--- identity, so per-user isolation is enforced in the backend (every query is
--- scoped by the verified Clerk user_id / guest_token). RLS is therefore
--- optional defense-in-depth. To add it later: configure a Clerk JWT template so
--- Postgres can read Clerk's `sub`, then add policies like:
---   alter table attempts enable row level security;
---   create policy "own attempts" on attempts using (user_id = auth.jwt()->>'sub');
+-- service-role key (which bypasses RLS). Identity is a verified Supabase Auth
+-- JWT (or guest token) checked in FastAPI; every query is scoped by that
+-- user_id / guest_token. Keep anon/authenticated revoked (see rls.sql).
 -- ---------------------------------------------------------------------------

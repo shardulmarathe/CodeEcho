@@ -69,7 +69,9 @@ export interface SessionResult {
   metrics: SessionMetrics;
   transcript_text: string;
   audio_url?: string | null;
+  audio_path?: string | null;
   error?: string | null;
+  max_duration_sec?: number | null;
 }
 
 export interface QuestionExample {
@@ -86,7 +88,19 @@ export interface Question {
   constraints?: string | null;
   examples: QuestionExample[];
   meta: Record<string, unknown>;
+  owner_user_id?: string | null;
   created_at?: string | null;
+}
+
+/** Seconds the recorder should allow. Session cap wins; else 5 min for design/project, 3 min otherwise. */
+export function recordingCapSec(
+  question: Question,
+  sessionCap?: number | null
+): number {
+  if (sessionCap && sessionCap > 0) return sessionCap;
+  const track = question.meta?.track;
+  if (track === "system_design" || track === "project") return 300;
+  return 180;
 }
 
 export interface ModelAnswer {
@@ -114,6 +128,11 @@ export interface Scorecard {
   created_at?: string | null;
 }
 
+export interface DimensionScore {
+  dimension: string;
+  score: number;
+}
+
 export interface AttemptSummary {
   session_id: string;
   title: string;
@@ -121,6 +140,13 @@ export interface AttemptSummary {
   created_at?: string | null;
   total_fillers: number;
   duration_sec: number;
+  fillers_per_minute: number;
+  words_per_minute: number;
+  overall_score?: number | null;
+  dimensions: DimensionScore[];
+  bucket?: string | null;
+  qtype?: string | null;
+  rubric?: string | null;
 }
 
 export interface BudgetStatus {

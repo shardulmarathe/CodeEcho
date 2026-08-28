@@ -1,9 +1,16 @@
-"""Clerk authentication — verifies Clerk session JWTs against Clerk's JWKS.
+"""Supabase Auth — verify access tokens, resolve user or guest identity.
 
-Backend-mediated model: the frontend authenticates with Clerk and sends the
-session token as `Authorization: Bearer <jwt>`. Guests instead send a
-client-generated `X-Guest-Token` header. We verify the Clerk token's RS256
-signature using Clerk's published JWKS and trust the `sub` claim as the user id.
+Backend-mediated model: the frontend signs in with Supabase Auth and sends
+``Authorization: Bearer <access_token>``. Guests send a client-generated
+``X-Guest-Token`` header.
+
+Tokens are verified from the ``alg`` header:
+  - ES256 / RS256: JWKS at ``{SUPABASE_URL}/auth/v1/.well-known/jwks.json``
+    (current Supabase signing keys; no extra env).
+  - HS256: ``SUPABASE_JWT_SECRET`` if set (legacy shared secret / tests).
+
+FastAPI is the PEP; Postgres is queried with the service-role key scoped by
+this Identity.
 """
 
 from dataclasses import dataclass
@@ -11,21 +18,20 @@ from typing import Optional
 
 import jwt
 from fastapi import HTTPException, Request
-from jwt import PyJWKClient
 
 from app.config import settings
 from app.services import usage
 
-_jwks_client: Optional[PyJWKClient] = None
-_jwks_url: str = ""
+_jwks_clients: dict[str, jwt.PyJWKClient] = {}
 
 
 @dataclass
 class Identity:
-    """Who is making the request — a logged-in Clerk user or an anonymous guest."""
+    """Who is making the request — a signed-in Supabase user or an anonymous guest."""
 
     user_id: Optional[str] = None
     guest_token: Optional[str] = None
+    email: Optional[str] = None
 
     @property
     def is_user(self) -> bool:
@@ -36,47 +42,9 @@ class Identity:
         return self.user_id is None and self.guest_token is not None
 
 
-def clerk_configured() -> bool:
-    return bool(settings.effective_clerk_jwks_url)
-
-
-def _get_jwks_client() -> Optional[PyJWKClient]:
-    global _jwks_client, _jwks_url
-    url = settings.effective_clerk_jwks_url
-    if not url:
-        return None
-    if _jwks_client is None or _jwks_url != url:
-        _jwks_client = PyJWKClient(url, cache_keys=True)
-        _jwks_url = url
-    return _jwks_client
-
-
-def verify_clerk_token(token: str) -> str:
-    """Verify a Clerk session JWT and return the Clerk user id (`sub`)."""
-    client = _get_jwks_client()
-    if client is None:
-        raise HTTPException(status_code=503, detail="Auth is not configured (CLERK_ISSUER unset).")
-    try:
-        signing_key = client.get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            issuer=settings.clerk_issuer or None,
-            options={
-                "verify_aud": False,  # Clerk session tokens have no audience by default
-                "verify_iss": bool(settings.clerk_issuer),
-            },
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:  # invalid signature / expired / malformed
-        raise HTTPException(status_code=401, detail=f"Invalid authentication token: {exc}")
-
-    sub = claims.get("sub")
-    if not sub:
-        raise HTTPException(status_code=401, detail="Token is missing a subject claim.")
-    return sub
+def auth_configured() -> bool:
+    """True when we can verify access tokens: JWKS via project URL, or HS256 secret."""
+    return bool(settings.supabase_url) or bool(settings.supabase_jwt_secret)
 
 
 def _bearer_token(request: Request) -> Optional[str]:
@@ -86,25 +54,104 @@ def _bearer_token(request: Request) -> Optional[str]:
     return header.split(" ", 1)[1].strip() or None
 
 
-async def get_current_user(request: Request) -> str:
-    """FastAPI dependency: require a valid Clerk user; return the user id."""
-    token = _bearer_token(request)
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    return verify_clerk_token(token)
+def _guest_header(request: Request) -> Optional[str]:
+    guest = request.headers.get("x-guest-token")
+    return guest.strip() if guest else None
 
 
-async def get_optional_identity(request: Request) -> Identity:
-    """FastAPI dependency: resolve a logged-in user OR a guest token.
+def _issuer() -> str:
+    return settings.supabase_url.rstrip("/") + "/auth/v1"
+
+
+def _jwks_client() -> jwt.PyJWKClient:
+    url = _issuer() + "/.well-known/jwks.json"
+    client = _jwks_clients.get(url)
+    if client is None:
+        client = jwt.PyJWKClient(url, cache_jwk_set=True, lifespan=3600)
+        _jwks_clients[url] = client
+    return client
+
+
+def _decode_hs256(token: str) -> dict:
+    if not settings.supabase_jwt_secret:
+        raise jwt.InvalidTokenError("HS256 token but SUPABASE_JWT_SECRET is unset.")
+    return jwt.decode(
+        token,
+        settings.supabase_jwt_secret,
+        algorithms=["HS256"],
+        audience="authenticated",
+        issuer=_issuer(),
+    )
+
+
+def _decode_jwks(token: str) -> dict:
+    if not settings.supabase_url:
+        raise jwt.InvalidTokenError("Asymmetric token but SUPABASE_URL is unset.")
+    key = _jwks_client().get_signing_key_from_jwt(token).key
+    return jwt.decode(
+        token,
+        key,
+        algorithms=["ES256", "RS256"],
+        audience="authenticated",
+        issuer=_issuer(),
+    )
+
+
+def verify_access_token(token: str) -> tuple[str, Optional[str]]:
+    """Verify a Supabase Auth access token and return ``(sub, email)``."""
+    if not auth_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Auth is not configured (SUPABASE_URL unset).",
+        )
+    try:
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg")
+        if alg == "HS256":
+            claims = _decode_hs256(token)
+        else:
+            claims = _decode_jwks(token)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid authentication token: {exc}")
+
+    sub = claims.get("sub")
+    if not sub:
+        raise HTTPException(status_code=401, detail="Token is missing a subject claim.")
+    email = claims.get("email")
+    return str(sub), email if isinstance(email, str) else None
+
+
+def resolve_identity(request: Request) -> Identity:
+    """Resolve identity once per request and cache on ``request.state``.
 
     A present-but-invalid bearer token still raises 401 (no silent downgrade).
     """
+    cached = getattr(request.state, "identity", None)
+    if cached is not None:
+        return cached
+
     token = _bearer_token(request)
     if token:
-        identity = Identity(user_id=verify_clerk_token(token))
+        user_id, email = verify_access_token(token)
+        identity = Identity(user_id=user_id, email=email)
     else:
-        guest = request.headers.get("x-guest-token")
-        identity = Identity(guest_token=guest.strip() if guest else None)
-    # Bill/throttle budget against this caller (user id, or IP for guests/anon).
+        identity = Identity(guest_token=_guest_header(request))
+    request.state.identity = identity
+    return identity
+
+
+async def get_current_user(request: Request) -> str:
+    """FastAPI dependency: require a valid signed-in user; return the user id."""
+    identity = resolve_identity(request)
+    if not identity.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return identity.user_id
+
+
+async def get_optional_identity(request: Request) -> Identity:
+    """FastAPI dependency: resolve a logged-in user OR a guest token."""
+    identity = resolve_identity(request)
     usage.set_subject(usage.subject_string(request, identity))
     return identity

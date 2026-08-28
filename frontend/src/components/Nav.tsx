@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { clerkEnabled } from "@/lib/identity";
+import { authEnabled } from "@/lib/identity";
 import { AuthControls } from "@/components/auth/AuthControls";
 
 export function Nav() {
@@ -16,7 +16,14 @@ export function Nav() {
           <span className="text-amber cursor-blink ml-0.5">_</span>
         </Link>
         <div className="flex items-center gap-4 text-xs mono text-muted">
-          {clerkEnabled && <AuthControls />}
+          {authEnabled && (
+            <>
+              <Link href="/progress" className="hover:text-echo">
+                Progress
+              </Link>
+              <AuthControls />
+            </>
+          )}
         </div>
       </div>
     </nav>

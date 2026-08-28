@@ -6,6 +6,7 @@ import { SketchButton } from "@/components/sketch/SketchButton";
 import { Doodle } from "@/components/sketch/Doodle";
 import { FillerBreakdown } from "@/components/MetricCard";
 import { TranscriptView } from "@/components/TranscriptView";
+import { Timeline } from "@/components/Timeline";
 import { TAG_ORDER, tagLabel } from "@/lib/tags";
 
 const TAG_MEANING: Record<string, string> = {
@@ -92,6 +93,12 @@ export function SpeakLexicon({
           label="Your answer"
         />
       </SketchBox>
+
+      <Timeline
+        durationSec={m.duration_sec}
+        fillers={session.fillers}
+        pauses={session.pauses}
+      />
 
       {/* What ideas they attach to */}
       <SketchBox className="space-y-4" accent>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { FillerOccurrence } from "@/lib/types";
+import type { FillerOccurrence, PauseOccurrence } from "@/lib/types";
 import { formatTimestamp, getClipUrl } from "@/lib/api";
 import { tagLabel } from "@/lib/tags";
 import { SketchBox, SketchPill } from "./sketch/Sketch";
@@ -9,9 +9,10 @@ import { SketchBox, SketchPill } from "./sketch/Sketch";
 interface TimelineProps {
   durationSec: number;
   fillers: FillerOccurrence[];
+  pauses?: PauseOccurrence[];
 }
 
-export function Timeline({ durationSec, fillers }: TimelineProps) {
+export function Timeline({ durationSec, fillers, pauses }: TimelineProps) {
   const [selected, setSelected] = useState<FillerOccurrence | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -29,10 +30,29 @@ export function Timeline({ durationSec, fillers }: TimelineProps) {
 
       {/* Timeline bar */}
       <div className="relative h-2 rounded-full bg-neutral-100">
+        {(pauses ?? [])
+          .filter((p) => p.is_long)
+          .map((p, i) => {
+            const left = durationSec > 0 ? (p.start / durationSec) * 100 : 0;
+            const width = durationSec > 0 ? Math.max((p.duration / durationSec) * 100, 1.2) : 1.2;
+            return (
+              <span
+                key={`pause-${i}`}
+                className="absolute top-1/2 z-0 h-3.5 -translate-y-1/2 rounded-sm"
+                style={{
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  background: "var(--amber)",
+                }}
+                title={`Long pause ${p.duration.toFixed(1)}s at ${formatTimestamp(p.start)}`}
+                aria-label={`Long pause ${p.duration.toFixed(1)} seconds at ${formatTimestamp(p.start)}`}
+              />
+            );
+          })}
         {fillers.map((f, i) => (
           <button
             key={i}
-            className={`timeline-marker absolute top-1/2 -translate-y-1/2 -translate-x-1/2 ${
+            className={`timeline-marker absolute top-1/2 z-10 -translate-y-1/2 -translate-x-1/2 ${
               selected?.index === f.index ? "scale-150 ring-2 ring-neutral-400" : ""
             }`}
             style={{ left: `${(f.start / durationSec) * 100}%` }}

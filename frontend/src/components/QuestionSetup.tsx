@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Question } from "@/lib/types";
-import { generateQuestion, submitQuestion } from "@/lib/api";
+import { generateQuestion, getMe, submitQuestion } from "@/lib/api";
 import { CircleChoice } from "@/components/sketch/CircleChoice";
 import { SketchButton } from "@/components/sketch/SketchButton";
 import { SketchBox } from "@/components/sketch/Sketch";
@@ -36,9 +36,19 @@ export function QuestionSetup({
   const [qtype, setQtype] = useState<QType | null>(null);
   const [track, setTrack] = useState("coding");
   const [seniority, setSeniority] = useState<string | null>(null);
+  const [role, setRole] = useState("Software Engineer");
   const [custom, setCustom] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then((me) => {
+        if (me.profile?.seniority) setSeniority(me.profile.seniority);
+        if (me.profile?.target_role) setRole(me.profile.target_role);
+      })
+      .catch(() => {});
+  }, []);
 
   const busy = disabled || loading;
   const ready =
@@ -56,7 +66,7 @@ export function QuestionSetup({
           ? await submitQuestion({ qtype: "behavioral", prompt: custom, meta: { seniority } })
           : await generateQuestion({
               qtype,
-              role: "Software Engineer",
+              role,
               seniority: seniority!,
               track: qtype === "technical" ? track : undefined,
             });

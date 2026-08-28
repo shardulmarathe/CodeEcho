@@ -37,19 +37,9 @@ revoke all on function increment_api_usage(date, text, double precision)
   from anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- PHASE 2 (optional, later): real per-user RLS enforced by Postgres.
--- Only needed if you move any reads to the CLIENT (frontend talks to Supabase
--- directly instead of through the FastAPI backend). Steps:
---   1. Configure Clerk as a Supabase third-party auth provider (Supabase docs:
---      "Clerk" integration) so Postgres can read Clerk's `sub` from the JWT.
---   2. Grant the authenticated role scoped access and add owner policies, e.g.:
---
---      grant select, insert, update, delete on attempts to authenticated;
---      create policy "own attempts (user)" on attempts
---        for all to authenticated
---        using (user_id = auth.jwt()->>'sub')
---        with check (user_id = auth.jwt()->>'sub');
---
---   Guests have no Supabase identity (their token is client-minted), so guest
---   rows would stay backend-only — keep guest reads/writes going through the API.
+-- Do NOT add authenticated GRANTs or auth.uid() policies. FastAPI is the PEP.
+-- The service-role key bypasses RLS; store._owns is the ownership check.
+-- Child tables have no user_id, and pipeline persist has no user JWT, so
+-- "RLS actually runs" for those writes would be theater. Guests are not
+-- auth.uid() either. Keep this file default-deny.
 -- ---------------------------------------------------------------------------

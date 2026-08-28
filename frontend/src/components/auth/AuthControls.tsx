@@ -1,44 +1,65 @@
 "use client";
 
-import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
-import { useEffect } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { claimGuestAttempts } from "@/lib/api";
-import { getGuestToken, setTokenGetter } from "@/lib/identity";
+import { getGuestToken } from "@/lib/identity";
+import { getBrowserClient } from "@/lib/supabase";
 
 /**
- * Registers Clerk's token getter with the API client and, on sign-in, transfers
- * the guest's prior attempts to their new account. Renders nothing.
- * Only mounted when Clerk is configured (inside <ClerkProvider>).
+ * On sign-in, transfers the guest's prior attempts. Renders nothing.
  */
 export function AuthBridge() {
-  const { isSignedIn, getToken } = useAuth();
+  const client = getBrowserClient();
 
   useEffect(() => {
-    setTokenGetter(() => getToken());
-    return () => setTokenGetter(null);
-  }, [getToken]);
-
-  useEffect(() => {
-    if (isSignedIn) {
-      const guest = getGuestToken();
-      if (guest) claimGuestAttempts(guest).catch(() => {});
-    }
-  }, [isSignedIn]);
+    if (!client) return;
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        const guest = getGuestToken();
+        if (guest) claimGuestAttempts().catch(() => {});
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [client]);
 
   return null;
 }
 
-/** Sign-in button / user avatar for the nav. */
+/** Sign-in link / account chip for the nav. */
 export function AuthControls() {
-  const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return null;
-  return isSignedIn ? (
-    <UserButton />
+  const client = getBrowserClient();
+  const [email, setEmail] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!client) {
+      setEmail(null);
+      return;
+    }
+    client.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+    });
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      setEmail(session?.user?.email ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, [client]);
+
+  if (!client || email === undefined) return null;
+  return email ? (
+    <Link href="/account" className="text-xs mono hover:text-echo">
+      {email}
+    </Link>
   ) : (
-    <SignInButton mode="modal">
-      <button className="btn-circle border border-neutral-900 text-xs hover:bg-neutral-50">
-        Sign in
-      </button>
-    </SignInButton>
+    <Link
+      href="/sign-in"
+      className="btn-circle border border-neutral-900 text-xs hover:bg-neutral-50 px-3 py-1"
+    >
+      Sign in
+    </Link>
   );
 }

@@ -10,6 +10,7 @@ All cursors are DERIVED from the turns log (never stored as mutable counters):
 This keeps the in-memory cache and Supabase in sync and makes /advance idempotent.
 """
 
+import random
 import uuid
 from typing import Optional
 
@@ -36,35 +37,55 @@ TECHNICAL_SECTIONS = ("coding", "system_design", "project")
 
 # --- plan -------------------------------------------------------------------
 
-def build_plan(mode: str, section: Optional[str], num_behavioral: int) -> list[InterviewMainSpec]:
+def build_plan(
+    mode: str, section: Optional[str], num_behavioral: int, identity: Identity
+) -> list[InterviewMainSpec]:
     """The immutable ordered list of MAIN questions for the interview."""
     specs: list[InterviewMainSpec] = []
+    focus = questions.pick_focus(identity) or {}
+    focus_dim = focus.get("dimension")
     if mode == "technical":
         section = section if section in TECHNICAL_SECTIONS else "coding"
+        spec_focus = focus_dim if focus.get("track") == section else None
         if section == "coding":
             # 2-3 problems escalating in difficulty.
             for diff in ("easy", "medium", "hard"):
                 specs.append(
                     InterviewMainSpec(
-                        qtype="technical", track="coding", difficulty=diff, followup_cap=_CODING_CAP
+                        qtype="technical",
+                        track="coding",
+                        difficulty=diff,
+                        followup_cap=_CODING_CAP,
+                        focus=spec_focus,
                     )
                 )
         else:
             # system_design / project, one question, heavy follow-ups.
             specs.append(
-                InterviewMainSpec(qtype="technical", track=section, followup_cap=_HEAVY_CAP)
+                InterviewMainSpec(
+                    qtype="technical",
+                    track=section,
+                    followup_cap=_HEAVY_CAP,
+                    focus=spec_focus,
+                )
             )
     else:
         # Behavioral, spread main questions across the buckets.
         n = max(1, min(5, num_behavioral or 3))
-        import random
-
-        buckets = list(BUCKET_KEYS)
-        random.shuffle(buckets)
+        focus_bucket = focus.get("bucket")
+        if focus_bucket in BUCKET_KEYS:
+            buckets = [focus_bucket] + [b for b in BUCKET_KEYS if b != focus_bucket]
+        else:
+            buckets = list(BUCKET_KEYS)
+            random.shuffle(buckets)
         for i in range(n):
+            bucket = buckets[i % len(buckets)]
             specs.append(
                 InterviewMainSpec(
-                    qtype="behavioral", bucket=buckets[i % len(buckets)], followup_cap=_BEHAVIORAL_CAP
+                    qtype="behavioral",
+                    bucket=bucket,
+                    followup_cap=_BEHAVIORAL_CAP,
+                    focus=focus_dim if bucket == focus_bucket else None,
                 )
             )
     return specs
@@ -103,8 +124,13 @@ def _realize_main(spec: InterviewMainSpec, config: dict, identity: Identity) -> 
         track=spec.track,
         bucket=spec.bucket,
         competency=spec.competency,
+        focus=spec.focus,
     )
-    return store.create_question(q, owner_user_id=identity.user_id)
+    if spec.focus:
+        q.meta["focus"] = spec.focus
+    return store.create_question(
+        q, owner_user_id=identity.user_id, guest_token=identity.guest_token
+    )
 
 
 def _progress_label(session: InterviewSession, turn: InterviewTurn) -> str:
@@ -124,7 +150,7 @@ def start_interview(
     num_behavioral: int,
     identity: Identity,
 ) -> tuple[InterviewSession, InterviewTurn, Question]:
-    plan = build_plan(mode, section, num_behavioral)
+    plan = build_plan(mode, section, num_behavioral, identity)
     config = {"role": role, "seniority": seniority, "section": section, "mode": mode}
     session = InterviewSession(
         session_id=str(uuid.uuid4()),
@@ -197,7 +223,9 @@ def decide_next(
                 seniority=session.config.get("seniority", "mid"),
             )
         if fu is not None:
-            store.create_question(fu, owner_user_id=identity.user_id)
+            store.create_question(
+                fu, owner_user_id=identity.user_id, guest_token=identity.guest_token
+            )
             parent = _main_turn(session, turn.plan_index)
             next_turn = _new_turn(
                 turn.plan_index, fu.id, is_followup=True,
