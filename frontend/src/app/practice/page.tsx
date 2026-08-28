@@ -1,18 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  createAttempt,
-  getBudget,
-  getHealth,
-  getAttempt,
-  getModelAnswer,
-  streamAttempt,
-  scoreAttempt,
-  uploadAudio,
-} from "@/lib/api";
-import type { BudgetStatus, ModelAnswer, Question, Scorecard, SessionMetrics, SessionResult, WordTimestamp, FillerOccurrence, PauseOccurrence } from "@/lib/types";
+import { getBudget, getHealth, getModelAnswer, scoreAttempt } from "@/lib/api";
+import type { BudgetStatus, ModelAnswer, Question, Scorecard } from "@/lib/types";
 import { recordingCapSec } from "@/lib/types";
+import { useAttemptAnalysis } from "@/lib/useAttemptAnalysis";
 import { Nav } from "@/components/Nav";
 import { Waveform } from "@/components/Waveform";
 import { AudioRecorder, FileUpload } from "@/components/AudioInput";
@@ -32,21 +24,25 @@ import { ScoringLoader } from "@/components/ScoringLoader";
 type AppState = "setup" | "processing" | "results";
 
 export default function Practice() {
+  // record -> upload -> SSE -> delivery metrics, shared with /interview.
+  // Scoring stays here: practice shows a score immediately, the interview hides
+  // every score until the final report. That split is why the hook does not score.
+  const analysis = useAttemptAnalysis();
+  const {
+    session,
+    processingStep,
+    words,
+    transcriptText,
+    transcriptStreaming,
+    statusMessage,
+    transcriptSource,
+    fillers,
+    pauses,
+    error,
+  } = analysis;
+
   const [appState, setAppState] = useState<AppState>("setup");
   const [inputMode, setInputMode] = useState<"record" | "upload">("record");
-  const [session, setSession] = useState<SessionResult | null>(null);
-  const [processingStep, setProcessingStep] = useState<
-    "uploading" | "transcribing" | "analyzing" | "complete" | "error"
-  >("uploading");
-  const [words, setWords] = useState<WordTimestamp[]>([]);
-  const [transcriptText, setTranscriptText] = useState<string>("");
-  const [transcriptStreaming, setTranscriptStreaming] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [transcriptSource, setTranscriptSource] = useState<string | null>(null);
-  const [fillers, setFillers] = useState<FillerOccurrence[]>([]);
-  const [pauses, setPauses] = useState<PauseOccurrence[]>([]);
-  const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [mockMode, setMockMode] = useState(false);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -62,12 +58,16 @@ export default function Practice() {
   const [modelLoading, setModelLoading] = useState(false);
   // Results flow: analysis (Speak Lexicon) first, then the scorecard grid.
   const [resultsView, setResultsView] = useState<"lexicon" | "scores">("lexicon");
+  // State, not a ref: ScoringLoader renders from this, and a ref mutation would
+  // not schedule the re-render that shows the updated elapsed time.
+  const [scoringStartedAt, setScoringStartedAt] = useState<number | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
-  const completedRef = useRef(false);
   const questionRef = useRef<Question | null>(null);
   const scratchRef = useRef("");
-  const scoringStartedAtRef = useRef<number | null>(null);
+
+  const refreshBudget = useCallback(() => {
+    getBudget().then(setBudget).catch(() => {});
+  }, []);
 
   const updateScratch = (v: string) => {
     scratchRef.current = v;
@@ -76,169 +76,62 @@ export default function Practice() {
 
   useEffect(() => {
     getHealth().then((h) => setMockMode(h.mock_mode)).catch(() => {});
-    getBudget().then(setBudget).catch(() => {});
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
+    refreshBudget();
+  }, [refreshBudget]);
 
-  const closeStream = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-  }, []);
-
-  const finishWithSession = useCallback(async (sessionId: string) => {
-    closeStream();
-    setProcessingStep("complete");
-    const final = await getAttempt(sessionId);
-    setSession(final);
-    setWords(final.words);
-    setFillers(final.fillers);
-    setPauses(final.pauses ?? []);
-    setMetrics(final.metrics);
-    setResultsView("lexicon");
-    setAppState("results");
-    setLoading(false);
-    getBudget().then(setBudget).catch(() => {});
-
-    if (questionRef.current) {
+  const scoreCurrentAttempt = useCallback(
+    async (attemptId: string) => {
+      if (!questionRef.current) return;
+      // The scratchpad is only part of the answer for coding problems.
       const isCoding =
         questionRef.current.qtype === "technical" &&
         questionRef.current.meta?.track !== "project";
       const pseudocode = isCoding ? scratchRef.current : undefined;
+
       setScoring(true);
       setShowScorecard(false);
-      scoringStartedAtRef.current = Date.now();
+      setScoringStartedAt(Date.now());
       setScorecard(null);
       setScoreError(null);
       setModelAns(null);
       try {
-        setScorecard(await scoreAttempt(sessionId, pseudocode));
+        setScorecard(await scoreAttempt(attemptId, pseudocode));
       } catch (err) {
         setScorecard(null);
         setScoreError(err instanceof Error ? err.message : "Scoring failed");
         setScoring(false);
-        scoringStartedAtRef.current = null;
+        setScoringStartedAt(null);
       } finally {
-        getBudget().then(setBudget).catch(() => {});
+        refreshBudget();
       }
-    }
-  }, [closeStream]);
-
-  const runStreamAnalysis = useCallback(
-    (sessionId: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        completedRef.current = false;
-        closeStream();
-        const ac = new AbortController();
-        abortRef.current = ac;
-
-        const handleServerError = (message: string) => {
-          if (completedRef.current) return;
-          completedRef.current = true;
-          closeStream();
-          reject(new Error(message));
-        };
-
-        streamAttempt(
-          sessionId,
-          (event, data) => {
-            if (event === "status") {
-              if (typeof data.status === "string") {
-                setProcessingStep(data.status as typeof processingStep);
-              }
-              if (typeof data.message === "string") setStatusMessage(data.message);
-            } else if (event === "transcript_source") {
-              setTranscriptSource((data.source as string) || null);
-              if (typeof data.message === "string") setStatusMessage(data.message);
-            } else if (event === "transcript_partial") {
-              setWords(data.words as WordTimestamp[]);
-              setTranscriptText((data.transcript_text as string) || "");
-              setTranscriptStreaming(!data.complete);
-              setProcessingStep("transcribing");
-            } else if (event === "transcript") {
-              setWords(data.words as WordTimestamp[]);
-              setTranscriptText((data.transcript_text as string) || "");
-              setTranscriptStreaming(false);
-              setProcessingStep("transcribing");
-            } else if (event === "fillers") {
-              setFillers(data.fillers as FillerOccurrence[]);
-              setProcessingStep("analyzing");
-              setStatusMessage("Computing delivery metrics…");
-            } else if (event === "pauses") {
-              setPauses(data.pauses as PauseOccurrence[]);
-            } else if (event === "metrics") {
-              setMetrics(data.metrics as SessionMetrics);
-            } else if (event === "complete") {
-              completedRef.current = true;
-              finishWithSession(sessionId).then(resolve).catch(reject);
-            } else if (event === "error") {
-              handleServerError((data.error as string) || "Analysis failed");
-            }
-          },
-          ac.signal
-        )
-          .then(async () => {
-            if (completedRef.current) return;
-            closeStream();
-            try {
-              const result = await getAttempt(sessionId);
-              if (result.status === "complete") {
-                completedRef.current = true;
-                await finishWithSession(sessionId);
-                resolve();
-              } else if (result.status === "failed") {
-                reject(new Error(result.error || "Analysis failed"));
-              }
-            } catch (err) {
-              reject(err instanceof Error ? err : new Error("Analysis failed"));
-            }
-          })
-          .catch((err) => {
-            if (ac.signal.aborted || completedRef.current) return;
-            handleServerError(err instanceof Error ? err.message : "Analysis failed");
-          });
-      });
     },
-    [closeStream, finishWithSession]
+    [refreshBudget]
   );
 
   const startAnalysis = useCallback(
     async (blob: Blob, filename: string, liveTranscript?: string) => {
-      if (blob.size < 1000) {
-        setError("That recording is too short. Aim for at least a few seconds.");
+      setLoading(true);
+      setAppState("processing");
+      let attemptId: string;
+      try {
+        attemptId = await analysis.start(blob, filename, {
+          liveTranscript,
+          questionId: questionRef.current?.id,
+          title: "Practice attempt",
+        });
+      } catch {
+        // The hook has already put the reason in `error`, which the processing
+        // view renders along with a retry. Nothing to add here.
+        setLoading(false);
         return;
       }
-      closeStream();
-      completedRef.current = false;
-      setLoading(true);
-      setError(null);
-      setAppState("processing");
-      setProcessingStep("uploading");
-      setWords([]);
-      setTranscriptText("");
-      setTranscriptStreaming(true);
-      setStatusMessage(null);
-      setTranscriptSource(null);
-      setFillers([]);
-      setPauses([]);
-      setMetrics(null);
-      setSession(null);
-      try {
-        const newSession = await createAttempt("Practice attempt", questionRef.current?.id);
-        setSession(newSession);
-        await uploadAudio(newSession.session_id, blob, filename, liveTranscript);
-        setProcessingStep("transcribing");
-        setStatusMessage("Transcribing…");
-        await runStreamAnalysis(newSession.session_id);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
-        setProcessingStep("error");
-        setLoading(false);
-        closeStream();
-      }
+      setResultsView("lexicon");
+      setAppState("results");
+      setLoading(false);
+      refreshBudget();
+      await scoreCurrentAttempt(attemptId);
     },
-    [closeStream, runStreamAnalysis]
+    [analysis, refreshBudget, scoreCurrentAttempt]
   );
 
   const handleRecording = ({ blob, liveTranscript }: RecordingResult) =>
@@ -262,29 +155,18 @@ export default function Practice() {
       setModelAns(null);
     } finally {
       setModelLoading(false);
-      getBudget().then(setBudget).catch(() => {});
+      refreshBudget();
     }
   };
 
   const resetAttemptState = () => {
-    closeStream();
-    completedRef.current = false;
-    setSession(null);
+    analysis.reset();
     setScorecard(null);
     setScoring(false);
     setShowScorecard(false);
-    scoringStartedAtRef.current = null;
+    setScoringStartedAt(null);
     setScoreError(null);
-    setWords([]);
-    setTranscriptText("");
-    setTranscriptStreaming(false);
-    setStatusMessage(null);
-    setTranscriptSource(null);
-    setFillers([]);
-    setMetrics(null);
-    setError(null);
     setLoading(false);
-    setProcessingStep("uploading");
   };
 
   // Feedback loop: same question, fresh take (keep scratchpad to refine).
@@ -438,11 +320,11 @@ export default function Practice() {
               <ScoringLoader
                 active={scoring}
                 complete={!!scorecard}
-                startedAt={scoringStartedAtRef.current}
+                startedAt={scoringStartedAt}
                 onReady={() => {
                   setShowScorecard(true);
                   setScoring(false);
-                  scoringStartedAtRef.current = null;
+                  setScoringStartedAt(null);
                 }}
               />
             )}
