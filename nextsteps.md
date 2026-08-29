@@ -41,6 +41,53 @@ undeployed code. Deploy first, then flip the value.
 
 ---
 
+## 0b. The budget cap does not measure what it thinks it measures
+
+Found 2026-08-29 while stress-testing. The app's own ledger and Stanford's ledger
+are different numbers, and only Stanford's can actually stop you.
+
+```
+CodeEcho  GET /api/budget   ->  {"cap_usd": 2.5, "spent_usd": 0.0}
+Stanford  api.llm.stanford.edu -> 429 "Budget has been exceeded!
+                                       Current cost: 3.0, Max budget: 3.0"
+```
+
+`spent_usd: 0.0` and simultaneously hard-capped upstream. Two causes, both real:
+
+1. **Different reset windows.** `budget.py` resets at UTC midnight (`_today()`).
+   Stanford's counter clearly does not — the UTC day had just rolled over to
+   2026-08-29 and CodeEcho read zero while Stanford still read 3.0/3.0.
+2. **The key is not exclusive to CodeEcho.** Anything else using it — `gemini-cli`,
+   other projects, other experiments — spends the same $3.00 and CodeEcho never
+   sees it.
+
+**Consequence:** `API_BUDGET_CAP_USD` cannot protect the key. It is a local
+estimate of a counter it does not own. Tightening it from $25 to $2.50 was
+directionally right but does not achieve the goal, because the app can read $0.00
+spent while the upstream is fully exhausted.
+
+**What to do instead — this is a plan change, not a bug fix:**
+
+- **Handle 429 gracefully and say so.** Right now `questions.py` catches the error
+  and silently serves a mock-bank question; `scoring.py` surfaces
+  `ScoringUnavailable` as a 503. A user cannot tell "the shared daily budget is
+  used up, try tomorrow" from "the app is broken". For a recruiter demo that
+  distinction is everything. **Treat upstream 429 as a first-class state with its
+  own honest message.**
+- **Trust upstream over the local estimate.** On a 429, record the day as exhausted
+  locally so subsequent requests fail fast with the right message instead of
+  hammering a capped key.
+- **Do not remove the local cap.** It still bounds a runaway loop, which is what it
+  is actually good for. Just stop treating it as the real limit.
+
+**For the demo specifically (deadline risk):** if a recruiter clicks the link on a
+day the key is already spent, they get mock questions and 503s on scoring. This is
+now a top-tier risk to the two-week goal, and it is a strong argument for
+workstream B2 (the no-microphone path with frozen real output) doing double duty —
+**frozen sample output does not depend on the key at all.**
+
+---
+
 ## 1. Goal and constraints
 
 These were chosen deliberately. Do not silently relax them.

@@ -1,5 +1,9 @@
 """SWE interview question generation (behavioral + technical)."""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import json
 import random
 import re
@@ -313,7 +317,8 @@ def generate_question(
         )
     try:
         check_budget()
-    except Exception:
+    except Exception as exc:
+        logger.warning("Question generation: budget refused (%s) - using mock bank", exc)
         return _mock_question(
             qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
         )
@@ -419,6 +424,7 @@ Respond ONLY with valid JSON:
             meta=meta,
         )
     except Exception:
+        logger.exception("Question generation failed - falling back to mock bank")
         return _mock_question(
             qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
         )
