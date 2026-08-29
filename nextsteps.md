@@ -6,38 +6,39 @@ the system works; this document is only about what to do next and why.
 
 ---
 
-## 0. URGENT — production is degraded right now
+## 0. RESOLVED — production was broken, root cause found
 
-**Symptom.** `POST /api/questions/generate` on production returns canned questions
-from the offline mock bank instead of generated ones. Scoring returns 500.
+**Fixed 2026-08-29.** Recorded because the failure mode is the interesting part.
 
-**Cause.** `USER_DAILY_CAP_USD` and `GUEST_DAILY_CAP_USD` were set to `0` on Render
-to mean "unlimited". The code that understands `0` as unlimited is committed but
-**not yet deployed**. The deployed build still evaluates `spent_usd >= cap`, which
-with `cap = 0` is true on the first request from every caller. `questions.py` catches
-the resulting `BudgetExceededError` and silently degrades to the mock bank;
-`scoring.py` does not catch it, and `score_attempt_route` only handles
-`ScoringUnavailable`, so it surfaces as a 500.
+**Symptom.** Every LLM call on production failed, so `questions.py` silently served
+offline mock-bank questions and scoring 503'd. `/api/health` reported
+`gemini_configured: true` throughout, and `/api/budget` reported spend well under
+cap. Nothing looked wrong.
 
-**Fix — pick one:**
+**Root cause.** A stale, revoked `GEMINI_API_KEY` on Render. Every call returned
+`401 Invalid proxy server token`.
 
-- **Preferred:** merge and deploy the branch (section 2). The deployed code then
-  handles `0` correctly and everything else ships at the same time.
-- **Rollback if the deploy is delayed:** on Render, set `USER_DAILY_CAP_USD=0.50`
-  and `GUEST_DAILY_CAP_USD=0.15`. That restores the pre-change behaviour instantly.
-  Set them back to `0` once the new build is live.
+**Why it took hours instead of minutes.** `generate_question()` caught every
+exception and returned a mock question with no logging. A broken production was
+byte-for-byte indistinguishable from working offline mode. Two wrong theories got
+chased first — a budget-cap env var, then upstream pool exhaustion — before logging
+was added and the actual 401 surfaced.
 
-**Verify the fix.** Generate a behavioral question twice with different guest
-tokens. If both come back from this list, it is still broken:
+**A second trap found alongside it.** `~/.zshrc` exported `GEMINI_API_KEY`, and a
+real env var takes precedence over a project `.env` in pydantic-settings. So
+editing `backend/.env` appeared to do nothing locally: the stale shell export won
+silently. Both are now synced to the working key, with a warning comment in
+`.zshrc`.
 
-```
-"What do you consider your biggest strength as an engineer? ..."
-"Tell me about a time you disagreed with a teammate ..."
-"Tell me about a technical concept you really enjoyed learning recently ..."
-```
+**Verified working:** behavioral and technical question generation return fresh
+LLM output, interview orchestration builds its plan, and recorded spend increments.
 
-**Lesson for the plan:** never change an env var whose semantics only exist in
-undeployed code. Deploy first, then flip the value.
+**The durable lessons, both now in section 6:**
+- Never let a fallback be silent. A graceful degradation you cannot observe is
+  indistinguishable from an outage, and it will cost hours.
+- A shell export shadows a project `.env`. Check `os.environ` before trusting a
+  config file you just edited.
+- Do not change an env var whose semantics only exist in undeployed code.
 
 ---
 
