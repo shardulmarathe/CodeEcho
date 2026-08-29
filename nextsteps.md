@@ -228,8 +228,11 @@ Be honest about this when continuing.
 | Cost metering | 7 tests, incl. the 7x undercount case |
 | Types and lint | `tsc --noEmit` and `eslint` clean |
 | Keep-alive fires | `cron.job_run_details`, 5 successes |
-| **UI renders correctly** | **NOT verified visually.** Chrome extension could not attach to localhost (`document_idle` never fires on the Next dev page). Pages return 200 with correct SSR content and no runtime errors, but no one has looked at the history panel or the refactored practice page. |
-| **Practice flow still works end to end** | **NOT verified interactively.** The refactor was walked path-by-path against the original, but nobody has recorded an answer and watched a scorecard appear. |
+| Practice flow end to end, **on production** | **Verified 2026-08-29** with synthesised speech (`say` + ffmpeg), driven through the real API: BYO question classified correctly (behavioral/experience/conflict), attempt created, audio uploaded, Whisper transcribed 107 words accurately, filler detection found exactly the 3 "um" + 1 "you know" present in the source, pauses and WPM computed, scorecard returned 1.5/5. |
+| Scoring cross-validates | **Verified.** The same answer scored 1.4/5 locally from a fed transcript and 1.5/5 on production from real audio through Whisper, with the same dimension pattern. Transcription is not distorting the score. |
+| Mock interview end to end, **on production** | **Verified 2026-08-29.** 1 main + 2 follow-ups (respecting `_BEHAVIORAL_CAP`), real audio analysed per turn, then DONE. Report aggregated delivery correctly (3x4=12 fillers, 3x4=12 pauses) and its summary independently noticed the same answer had been given three times. |
+| Cost per attempt | **Measured.** One full practice attempt (Whisper + filler LLM + transitions + pro scoring) = **~$0.021** by the app's own now-accurate metering. |
+| **UI renders correctly** | **STILL NOT verified visually.** Chrome extension cannot attach to the Next dev server (`document_idle` never fires). Pages return 200 with correct SSR content and no runtime errors, and every API path behind them is now proven, but nobody has *looked* at the history panel or the refactored practice screen. This is the one remaining gap. |
 
 **Do this before anything else in section 4:** record one practice answer and run
 one full mock interview by hand.
@@ -300,13 +303,25 @@ Fixes section 0 and unblocks everything.
 1. Merge and push. Watch both deploys.
 2. Confirm `/api/budget` reads `cap_usd: 2.5, spent_usd: <real>`.
 3. Confirm question generation is no longer hitting the mock bank.
-4. **By hand:** record one practice answer end to end; run one full mock interview
-   including a follow-up and the final report; start an interview, close the tab,
-   reopen `/interview`, hit Resume.
-5. Fix whatever that surfaces before starting B.
+4. ~~Verify the API paths~~ — **done 2026-08-29**, automated end to end against
+   production. See section 2. Practice, the interview loop, the report, and scoring
+   all work on the live deployment with real audio.
+5. **Still needed, by hand — this is a UI check, not an API check.** Open production
+   in a browser and confirm: the practice screen renders a scorecard after a real
+   recording; the interview history panel appears on `/interview` with a working
+   Resume; and both look right on a phone. The API beneath all three is proven, so
+   anything that breaks here is presentation-layer.
+
+**Known risk found while verifying:** if a turn's analysis fails, `build_report`
+reads an empty transcript and silently contributes "(no answer)" for that turn,
+dragging the whole interview score down with no explanation to the user. With every
+turn missing, the report reads "the candidate did not provide any responses" and
+scores 1.0. The frontend does await background analysis before building the report,
+so this needs a *failure* to trigger — but it is a bad failure mode for a demo and
+belongs in workstream D.
 
 **Done when:** a stranger can complete practice and a full interview on production
-without hitting an error.
+without hitting an error. (API side: already true.)
 
 ---
 
