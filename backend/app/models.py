@@ -177,12 +177,28 @@ class ScoreDimension(BaseModel):
     suggestion: str = ""
 
 
+class ScoreSource(BaseModel):
+    """A KB chunk actually retrieved while grading (never model-generated)."""
+
+    id: str
+    title: str
+    url: Optional[str] = None
+    snippet: str = ""
+
+
+class DimensionDefinition(BaseModel):
+    name: str
+    description: str
+
+
 class Scorecard(BaseModel):
     attempt_id: str
     rubric: str  # "star" | "technical"
     overall_score: float = 0.0  # 1–5
     overall_summary: str = ""
     dimensions: list[ScoreDimension] = Field(default_factory=list)
+    sources: list[ScoreSource] = Field(default_factory=list)
+    dimension_definitions: list[DimensionDefinition] = Field(default_factory=list)
     created_at: Optional[str] = None
 
 

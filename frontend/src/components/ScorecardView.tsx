@@ -2,6 +2,7 @@
 
 import type { Scorecard } from "@/lib/types";
 import { SketchBox, SketchBar } from "./sketch/Sketch";
+import { ScorecardTransparency } from "./ScorecardTransparency";
 
 // Signal scale: teal = strong, amber = needs work.
 function scoreColor(score: number): string {
@@ -45,6 +46,8 @@ export function ScorecardView({ scorecard }: { scorecard: Scorecard }) {
           <p className="text-xs mono text-muted mt-1">overall / 5</p>
         </div>
       </div>
+
+      <ScorecardTransparency scorecard={scorecard} />
 
       <div className="space-y-5">
         {scorecard.dimensions.map((d) => (

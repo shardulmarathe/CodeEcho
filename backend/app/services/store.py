@@ -17,6 +17,7 @@ from typing import Optional
 
 from app.models import (
     AttemptSummary,
+    DimensionDefinition,
     DimensionScore,
     FillerOccurrence,
     InterviewMainSpec,
@@ -28,6 +29,7 @@ from app.models import (
     QuestionExample,
     Scorecard,
     ScoreDimension,
+    ScoreSource,
     SessionMetrics,
     SessionResult,
     SessionStatus,
@@ -372,6 +374,11 @@ def save_scorecard(scorecard: Scorecard) -> Scorecard:
                     "overall_score": scorecard.overall_score,
                     "overall_summary": scorecard.overall_summary,
                     "dimensions": [d.model_dump() for d in scorecard.dimensions],
+                    "sources": [source.model_dump() for source in scorecard.sources],
+                    "dimension_definitions": [
+                        definition.model_dump()
+                        for definition in scorecard.dimension_definitions
+                    ],
                 }
             ).execute()
         except Exception:
@@ -404,6 +411,11 @@ def get_scorecard(attempt_id: str) -> Optional[Scorecard]:
             overall_score=r.get("overall_score") or 0.0,
             overall_summary=r.get("overall_summary") or "",
             dimensions=[ScoreDimension(**d) for d in (r.get("dimensions") or [])],
+            sources=[ScoreSource(**source) for source in (r.get("sources") or [])],
+            dimension_definitions=[
+                DimensionDefinition(**definition)
+                for definition in (r.get("dimension_definitions") or [])
+            ],
             created_at=r.get("created_at"),
         )
     except Exception:

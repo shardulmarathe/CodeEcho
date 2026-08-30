@@ -119,12 +119,26 @@ export interface ScoreDimension {
   suggestion: string;
 }
 
+export interface ScoreSource {
+  id: string;
+  title: string;
+  url: string | null;
+  snippet: string;
+}
+
+export interface DimensionDefinition {
+  name: string;
+  description: string;
+}
+
 export interface Scorecard {
   attempt_id: string;
   rubric: string; // "star" | "technical"
   overall_score: number;
   overall_summary: string;
   dimensions: ScoreDimension[];
+  sources: ScoreSource[];
+  dimension_definitions: DimensionDefinition[];
   created_at?: string | null;
 }
 

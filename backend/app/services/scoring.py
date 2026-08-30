@@ -16,8 +16,17 @@ computed, anchoring the more subjective content scores.
 import json
 import re
 from typing import Optional
+from urllib.parse import urlparse
 
-from app.models import ModelAnswer, Question, Scorecard, ScoreDimension, SessionResult
+from app.models import (
+    DimensionDefinition,
+    ModelAnswer,
+    Question,
+    Scorecard,
+    ScoreDimension,
+    ScoreSource,
+    SessionResult,
+)
 from app.services import kb_store
 from app.services.behavioral import (
     get_bucket,
@@ -47,16 +56,45 @@ def _score_completion(prompt: str) -> LLMResult:
     )
 
 
-def _retrieve_reference(question: str, bucket_key: str) -> str:
+def _source_from_doc(doc) -> ScoreSource:
+    """Map a retrieved KB row to client-safe citation data without model involvement."""
+    meta = doc.meta or {}
+    title = next(
+        (
+            str(value).strip()
+            for value in (meta.get("title"), meta.get("source"), doc.ref)
+            if value and str(value).strip()
+        ),
+        "Knowledge base reference",
+    )
+    url = next(
+        (
+            candidate
+            for value in (meta.get("canonical_url"), meta.get("url"))
+            if value
+            for candidate in [str(value).strip()]
+            if urlparse(candidate).scheme in {"http", "https"}
+        ),
+        None,
+    )
+    snippet = " ".join(doc.content.split())
+    if len(snippet) > 240:
+        snippet = f"{snippet[:237].rstrip()}..."
+    return ScoreSource(id=doc.id, title=title, url=url, snippet=snippet)
+
+
+def _retrieve_reference(question: str, bucket_key: str) -> tuple[str, list[ScoreSource]]:
     """RAG: pull the most relevant behavioral-guidance chunks for this question.
 
-    Returns a newline-joined block (empty if the KB is empty or retrieval fails, so
-    scoring degrades to the pre-RAG behavior)."""
+    Returns the content-only prompt block plus metadata for the exact retrieved rows.
+    Both are empty if retrieval fails, so scoring degrades to rubric-only grading."""
     try:
         docs = kb_store.retrieve_similar(question, bucket=bucket_key)
     except Exception:
-        return ""
-    return "\n\n".join(f"- {d.content.strip()}" for d in docs if d.content.strip())
+        return "", []
+    docs = [doc for doc in docs if doc.content.strip()]
+    reference = "\n\n".join(f"- {doc.content.strip()}" for doc in docs)
+    return reference, [_source_from_doc(doc) for doc in docs]
 
 
 def _format_problem(question: Question) -> str:
@@ -73,14 +111,14 @@ def _format_problem(question: Question) -> str:
     return "\n".join(parts)
 
 # Behavioral dimensions are per-bucket, see app.services.behavioral.BUCKETS.
-TECHNICAL_DIMENSIONS = [
-    "Problem understanding",
-    "Approach & optimization",
-    "Correctness",
-    "Complexity analysis",
-    "Edge cases",
-    "Communication",
-    "Delivery",
+TECHNICAL_DIMENSION_DEFINITIONS = [
+    ("Problem understanding", "did they clarify constraints, inputs, and edge conditions?"),
+    ("Approach & optimization", "did they consider brute force then optimize, with a sound algorithm and data structure?"),
+    ("Correctness", "is the described approach actually correct?"),
+    ("Complexity analysis", "did they state accurate time and space Big-O?"),
+    ("Edge cases", "did they call out important edge cases?"),
+    ("Communication", "was their thinking-out-loud structured and clear?"),
+    ("Delivery", "spoken fluency and confidence given the filler and pace stats"),
 ]
 
 
@@ -113,7 +151,13 @@ def _parse_json(text: str) -> dict:
     return json.loads(match.group())
 
 
-def _build_scorecard(attempt_id: str, rubric: str, data: dict, allowed: list[str]) -> Scorecard:
+def _build_scorecard(
+    attempt_id: str,
+    rubric: str,
+    data: dict,
+    definitions: list[tuple[str, str]],
+    sources: Optional[list[ScoreSource]] = None,
+) -> Scorecard:
     dims: list[ScoreDimension] = []
     for item in data.get("dimensions", []):
         name = (item.get("dimension") or "").strip()
@@ -139,6 +183,11 @@ def _build_scorecard(attempt_id: str, rubric: str, data: dict, allowed: list[str
         overall_score=overall,
         overall_summary=(data.get("overall_summary") or "").strip(),
         dimensions=dims,
+        sources=sources or [],
+        dimension_definitions=[
+            DimensionDefinition(name=name, description=description)
+            for name, description in definitions
+        ],
     )
 
 
@@ -261,6 +310,9 @@ its specific points where relevant):
         if reference
         else ""
     )
+    dim_lines = "\n".join(
+        f"- {name}: {description}" for name, description in TECHNICAL_DIMENSION_DEFINITIONS
+    )
     return f"""You are a senior software-engineering interviewer scoring a candidate's SPOKEN explanation of how they would solve a coding problem (they are talking through their approach, not writing code).{reference_block}
 
 {_format_problem(question)}
@@ -272,13 +324,7 @@ Objective delivery stats: {delivery}
 {INJECTION_GUARD}
 
 First, internally recall the optimal solution and its time/space complexity, grounded in the stated constraints and examples — use that as your reference. Then score the candidate's EXPLANATION on each dimension from 1 to 5 (5 = excellent). For each give a one-line rationale, a short evidence quote from the transcript, and one concrete suggestion:
-- Problem understanding: did they clarify constraints, inputs, and edge conditions?
-- Approach & optimization: did they consider brute force then optimize; sound algorithm/data-structure choice?
-- Correctness: is the described approach actually correct?
-- Complexity analysis: did they state time and space Big-O, and is it accurate?
-- Edge cases: did they call out important edge cases?
-- Communication: structured, clear thinking-out-loud?
-- Delivery: spoken fluency and confidence given the filler/pace stats?
+{dim_lines}
 
 Respond ONLY with valid JSON:
 {{"overall_summary": "<2-3 sentence summary, may note the optimal approach/complexity you compared against>", "dimensions": [{{"dimension": "Problem understanding", "score": <1-5>, "rationale": "...", "evidence": "...", "suggestion": "..."}}, ... one object per dimension above]}}"""
@@ -303,14 +349,14 @@ def score_attempt(
     if tech_track:  # project or system design — verbal, own rubric
         seniority = meta.get("seniority") or ""
         rubric = tech_track.key
-        allowed = [name for name, _ in tech_track.dimensions]
-        reference = _retrieve_reference(question.prompt, tech_track.key)
+        definitions = tech_track.dimensions
+        reference, sources = _retrieve_reference(question.prompt, tech_track.key)
         prompt = _track_prompt(
             tech_track, question.prompt, transcript, delivery, seniority, reference
         )
     elif question.qtype == "technical":
-        rubric, allowed = "technical", TECHNICAL_DIMENSIONS
-        reference = _retrieve_reference(question.prompt, "coding")
+        rubric, definitions = "technical", TECHNICAL_DIMENSION_DEFINITIONS
+        reference, sources = _retrieve_reference(question.prompt, "coding")
         prompt = _technical_prompt(question, transcript, delivery, pseudocode, reference)
     else:
         bucket_key = (question.meta or {}).get("bucket") or "experience"
@@ -318,8 +364,8 @@ def score_attempt(
         competency = (question.meta or {}).get("competency") or ""
         bucket = get_bucket(bucket_key)
         rubric = bucket.key
-        allowed = [name for name, _ in bucket.dimensions]
-        reference = _retrieve_reference(question.prompt, bucket_key)
+        definitions = bucket.dimensions
+        reference, sources = _retrieve_reference(question.prompt, bucket_key)
         prompt = _behavioral_prompt(
             question.prompt, transcript, delivery, bucket_key, seniority, reference, competency
         )
@@ -331,7 +377,9 @@ def score_attempt(
             result = _score_completion(prompt)
             text = result.text
             data = _parse_json(text)
-            scorecard = _build_scorecard(session.session_id, rubric, data, allowed)
+            scorecard = _build_scorecard(
+                session.session_id, rubric, data, definitions, sources
+            )
             if not scorecard.dimensions:
                 raise ScoringUnavailable("Scorecard had no dimensions.")
             try:
@@ -418,7 +466,7 @@ Respond ONLY with valid JSON:
             result = _score_completion(prompt)
             text = result.text
             data = _parse_json(text)
-            card = _build_scorecard("interview", rubric_key, data, [n for n, _ in dims])
+            card = _build_scorecard("interview", rubric_key, data, dims)
             if not card.dimensions:
                 raise ScoringUnavailable("No dimensions.")
             try:
@@ -433,6 +481,7 @@ Respond ONLY with valid JSON:
                 "dimensions": card.dimensions,
                 "overall_score": card.overall_score,
                 "overall_summary": card.overall_summary,
+                "dimension_definitions": card.dimension_definitions,
                 "verdict": (data.get("verdict") or "").strip(),
                 "strengths": [str(s).strip() for s in (data.get("strengths") or []) if str(s).strip()],
                 "improvements": [str(s).strip() for s in (data.get("improvements") or []) if str(s).strip()],
@@ -452,7 +501,7 @@ def model_answer(question: Question) -> ModelAnswer:
     meta = question.meta or {}
     tech_track = get_technical_track(meta.get("track")) if question.qtype == "technical" else None
     if question.qtype == "technical" and not tech_track:
-        reference = _retrieve_reference(question.prompt, "coding")
+        reference, _ = _retrieve_reference(question.prompt, "coding")
         reference_block = (
             f"\n\nReference coaching material (from expert coding-interview guides — base the "
             f'model answer on this):\n"""\n{reference}\n"""'
@@ -466,7 +515,7 @@ def model_answer(question: Question) -> ModelAnswer:
 Respond ONLY with valid JSON:
 {{"approach": "<the optimal approach in 2-4 sentences>", "complexity": "<time and space Big-O>", "key_points": ["<a specific thing a 5/5 answer covers>", "..."]}}"""
     elif tech_track:
-        reference = _retrieve_reference(question.prompt, tech_track.key)
+        reference, _ = _retrieve_reference(question.prompt, tech_track.key)
         reference_block = (
             f"\n\nReference coaching material (from expert interview guides — base the model "
             f'answer on this):\n"""\n{reference}\n"""'
@@ -483,7 +532,7 @@ Respond ONLY with valid JSON:
 {{"outline": "<how to structure a strong answer to this question, 2-4 sentences>", "key_points": ["<a specific thing a 5/5 answer covers>", "..."]}}"""
     else:
         bucket = get_bucket((question.meta or {}).get("bucket"))
-        reference = _retrieve_reference(question.prompt, bucket.key)
+        reference, _ = _retrieve_reference(question.prompt, bucket.key)
         reference_block = (
             f"\n\nReference coaching material (from expert interview guides — base the model "
             f'answer on this):\n"""\n{reference}\n"""'

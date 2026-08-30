@@ -119,7 +119,7 @@ def get_competency_guidance(key: str | None) -> str | None:
 
 # Technical tracks beyond plain coding. Same Bucket shape, but consumed by the technical
 # scoring/generation path (not part of the behavioral BUCKETS above). "coding" stays special
-# (constraints/examples/pseudocode + TECHNICAL_DIMENSIONS in scoring.py) and is not here.
+# (constraints/examples/pseudocode + technical dimension definitions in scoring.py) and is not here.
 PROJECT_TRACK = Bucket(
     key="project",
     label="project deep-dive",

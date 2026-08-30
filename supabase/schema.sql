@@ -115,6 +115,8 @@ create table if not exists scorecards (
     overall_summary text,
     overall_score float,
     dimensions jsonb default '[]',            -- [{dimension, score, rationale, evidence, suggestion}]
+    sources jsonb not null default '[]',       -- retrieved KB rows: [{id,title,url,snippet}]
+    dimension_definitions jsonb not null default '[]', -- [{name,description}]
     created_at timestamptz default now()
 );
 

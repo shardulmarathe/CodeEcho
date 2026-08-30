@@ -347,6 +347,7 @@ def build_report(session: InterviewSession, identity: Identity) -> InterviewRepo
                 overall_score=g["overall_score"],
                 overall_summary=g["overall_summary"],
                 dimensions=g["dimensions"],
+                dimension_definitions=g["dimension_definitions"],
             )
             overall = g["overall_score"]
             verdict = g["verdict"] or _verdict_from_score(overall)

@@ -4,6 +4,7 @@ import type { FillerOccurrence, PauseOccurrence, Scorecard, WordTimestamp } from
 import { SketchBox } from "@/components/sketch/Sketch";
 import { Doodle } from "@/components/sketch/Doodle";
 import { TranscriptView } from "@/components/TranscriptView";
+import { ScorecardTransparency } from "@/components/ScorecardTransparency";
 
 function scoreColor(score: number): string {
   return score >= 3.5 ? "var(--echo)" : "var(--amber)";
@@ -57,6 +58,8 @@ export function ScorecardGrid({
           <p className="text-muted text-sm max-w-3xl mt-2">{scorecard.overall_summary}</p>
         )}
       </div>
+
+      <ScorecardTransparency scorecard={scorecard} />
 
       {/* Dimension cards — full-width grid */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
