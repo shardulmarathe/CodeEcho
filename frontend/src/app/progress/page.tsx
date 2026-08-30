@@ -9,6 +9,7 @@ import { Doodle } from "@/components/sketch/Doodle";
 import { SketchBar, SketchBox, SketchPill } from "@/components/sketch/Sketch";
 import { SketchButton } from "@/components/sketch/SketchButton";
 import { getMe, listAttempts } from "@/lib/api";
+import { getGuestToken } from "@/lib/identity";
 import type { AttemptSummary } from "@/lib/types";
 
 const HEADLINE_SKIP = new Set(["delivery", "conciseness", "relevance"]);
@@ -71,6 +72,8 @@ function fmtScore(n: number, digits = 1): string {
 export default function ProgressPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [authAvailable, setAuthAvailable] = useState(false);
   const [attempts, setAttempts] = useState<AttemptSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -78,35 +81,33 @@ export default function ProgressPage() {
     let cancelled = false;
     (async () => {
       try {
+        // Initialize the same stable browser identity used by practice and listAttempts.
+        getGuestToken();
         const me = await getMe();
         if (cancelled) return;
-        if (!me.authenticated) {
-          router.replace("/sign-in");
-          return;
-        }
-        try {
-          const rows = await listAttempts();
-          if (cancelled) return;
-          setAttempts(rows);
-        } catch (e) {
-          if (cancelled) return;
-          setLoadError(e instanceof Error ? e.message : "Could not load attempts.");
-        }
-        setReady(true);
+        setAuthenticated(me.authenticated);
+        setAuthAvailable(me.auth_configured);
+      } catch {
+        if (cancelled) return;
+        // A guest can still have local history if the optional account probe fails.
+        setAuthenticated(false);
+      }
+
+      try {
+        const rows = await listAttempts();
+        if (cancelled) return;
+        setAttempts(rows);
       } catch (e) {
         if (cancelled) return;
-        const msg = e instanceof Error ? e.message : "Could not load your account.";
-        if (/authentication|unauthorized|401/i.test(msg)) {
-          router.replace("/sign-in");
-          return;
-        }
-        setLoadError(msg);
+        setLoadError(e instanceof Error ? e.message : "Could not load browser history.");
+      } finally {
+        if (!cancelled) setReady(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
   const scored = attempts.filter(isScored);
   const contentRank = averageDimensions(scored, HEADLINE_SKIP);
@@ -133,7 +134,9 @@ export default function ProgressPage() {
         }`}
       >
         <div className="mb-10 text-center">
-          <p className="eyebrow">over time</p>
+          <p className="eyebrow">
+            {authenticated === false ? "this browser · guest history" : "over time"}
+          </p>
           <div className="relative inline-block mt-2">
             <h1 className="hand text-4xl md:text-5xl font-bold">Progress</h1>
             <Doodle
@@ -155,8 +158,8 @@ export default function ProgressPage() {
             <SketchBox className="text-center space-y-5" padding={40}>
               <p className="hand text-2xl font-bold">Nothing here yet</p>
               <p className="text-sm text-muted max-w-sm mx-auto">
-                Practice a question out loud. After a few scored answers, this page
-                will show your weakest dimension, trends, and history.
+                This is history for this browser&apos;s guest token. Practice a question
+                out loud, then scored answers will appear here with trends and history.
               </p>
               <SketchButton
                 type="button"
@@ -170,6 +173,22 @@ export default function ProgressPage() {
           </div>
         ) : (
           <div className="space-y-10">
+            {authenticated === false && authAvailable && scored.length > 0 && (
+              <SketchBox className="space-y-3" padding={20}>
+                <p className="font-semibold">Keep this history beyond this browser</p>
+                <p className="text-sm text-muted">
+                  Sign in with an email code after seeing your results. The existing guest
+                  token stays in this browser while CodeEcho claims these attempts for the
+                  signed-in account.
+                </p>
+                <Link
+                  href="/sign-in?next=%2Fprogress"
+                  className="text-sm font-semibold text-echo underline underline-offset-4"
+                >
+                  Save history with email code →
+                </Link>
+              </SketchBox>
+            )}
             <SketchBox accent className="text-center space-y-3" padding={32}>
               <p className="eyebrow">weakest content dimension</p>
               {weakest ? (
