@@ -7,6 +7,11 @@ import { InterviewHistory } from "@/components/InterviewHistory";
 import { InterviewSession } from "@/components/InterviewSession";
 import { InterviewReport } from "@/components/InterviewReport";
 import { useAttemptAnalysis } from "@/lib/useAttemptAnalysis";
+import { useServiceReadiness } from "@/lib/useServiceReadiness";
+import {
+  ServiceStatusBanners,
+  TranscriptionStatusBanner,
+} from "@/components/ReliabilityBanners";
 import {
   advanceInterview,
   getCurrentInterviewTurn,
@@ -47,6 +52,7 @@ async function advanceWithRetry(
 
 export default function Interview() {
   const analysis = useAttemptAnalysis();
+  const service = useServiceReadiness();
   const [phase, setPhase] = useState<Phase>("setup");
   const [question, setQuestion] = useState<Question | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
@@ -211,6 +217,16 @@ export default function Interview() {
     <main className="min-h-dvh flex flex-col overflow-x-hidden">
       <Nav />
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 w-full flex-1 flex flex-col">
+        <ServiceStatusBanners
+          wakeState={service.wakeState}
+          health={service.health}
+          budget={service.budget}
+          onRetry={service.retry}
+        />
+        <TranscriptionStatusBanner
+          source={analysis.transcriptSource}
+          errorCode={analysis.errorCode}
+        />
         {phase !== "report" && (
           <div className="mb-8 text-center">
             <h1 className="hand text-4xl md:text-5xl font-bold">Mock Interview</h1>

@@ -84,7 +84,8 @@ export interface Question {
   id: string;
   qtype: string; // "behavioral" | "technical"
   prompt: string;
-  source: string;
+  source: "mock" | "generated" | "pasted";
+  fallback_reason?: string | null;
   constraints?: string | null;
   examples: QuestionExample[];
   meta: Record<string, unknown>;

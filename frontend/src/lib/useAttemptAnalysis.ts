@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ApiError,
   createAttempt,
   getAttempt,
   streamAttempt,
@@ -46,6 +47,7 @@ export function useAttemptAnalysis() {
   const [pauses, setPauses] = useState<PauseOccurrence[]>([]);
   const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const completedRef = useRef(false);
@@ -70,6 +72,7 @@ export function useAttemptAnalysis() {
     setPauses([]);
     setMetrics(null);
     setError(null);
+    setErrorCode(null);
     setProcessingStep("uploading");
   }, [closeStream]);
 
@@ -97,10 +100,11 @@ export function useAttemptAnalysis() {
         const ac = new AbortController();
         abortRef.current = ac;
 
-        const handleServerError = (message: string) => {
+        const handleServerError = (message: string, code?: string) => {
           if (completedRef.current) return;
           completedRef.current = true;
           closeStream();
+          setErrorCode(code ?? null);
           reject(new Error(message));
         };
 
@@ -135,7 +139,10 @@ export function useAttemptAnalysis() {
               completedRef.current = true;
               finish(sessionId).then(() => resolve()).catch(reject);
             } else if (event === "error") {
-              handleServerError((data.error as string) || "Analysis failed");
+              handleServerError(
+                (data.error as string) || "Analysis failed",
+                (data.code as string) || undefined
+              );
             }
           },
           ac.signal
@@ -158,7 +165,10 @@ export function useAttemptAnalysis() {
           })
           .catch((err) => {
             if (ac.signal.aborted || completedRef.current) return;
-            handleServerError(err instanceof Error ? err.message : "Analysis failed");
+            handleServerError(
+              err instanceof Error ? err.message : "Analysis failed",
+              err instanceof ApiError ? err.code : undefined
+            );
           });
       });
     },
@@ -194,6 +204,7 @@ export function useAttemptAnalysis() {
         setSession(newSession);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
+        setErrorCode(err instanceof ApiError ? err.code : null);
         setProcessingStep("error");
         closeStream();
         throw err;
@@ -207,6 +218,7 @@ export function useAttemptAnalysis() {
           await runStreamAnalysis(attemptId);
         } catch (err) {
           setError(err instanceof Error ? err.message : "Something went wrong");
+          setErrorCode(err instanceof ApiError ? err.code : null);
           setProcessingStep("error");
           closeStream();
           throw err;
@@ -243,6 +255,7 @@ export function useAttemptAnalysis() {
     pauses,
     metrics,
     error,
+    errorCode,
     // setters a caller may need
     setError,
     setProcessingStep,

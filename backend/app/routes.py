@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import shutil
 from pathlib import Path
 
@@ -42,7 +43,7 @@ from app.services.auth import (
     get_current_user,
     get_optional_identity,
 )
-from app.services.budget import get_budget_status
+from app.services.budget import BudgetExceededError, get_budget_status
 from app.services.llm_client import get_provider_label, is_configured
 from app.services.pipeline import run_analysis_pipeline
 from app.services.ratelimit import expensive_key, limiter
@@ -50,6 +51,7 @@ from app.services.scoring import ScoringUnavailable, model_answer, score_attempt
 from app.services.supabase_client import is_configured as supabase_configured
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".webm", ".ogg", ".mp4"}
 # A capped (1:30) answer is ~1 MB of opus/webm; 25 MB is generous headroom for other
@@ -64,6 +66,8 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 async def health():
     gemini_ok = is_configured()
     whisper_ok = settings.whisper_configured
+    budget = get_budget_status()
+    llm_status = "mock" if not gemini_ok else "degraded" if budget.budget_exceeded else "live"
     if whisper_ok:
         transcription_provider = "whisper"
     elif gemini_ok:
@@ -72,6 +76,8 @@ async def health():
         transcription_provider = "mock"
     return {
         "status": "ok",
+        "llm_status": llm_status,
+        "stt_status": "live" if settings.transcription_configured else "mock",
         "gemini_configured": gemini_ok,
         "whisper_configured": whisper_ok,
         "transcription_configured": settings.transcription_configured,
@@ -260,7 +266,9 @@ async def upload_audio(
     budget = get_budget_status()
     if budget.budget_exceeded:
         raise HTTPException(
-            status_code=402, detail=f"API budget cap of ${budget.cap_usd:.2f} reached."
+            status_code=402,
+            detail=f"Shared demo API budget cap of ${budget.cap_usd:.2f} reached.",
+            headers={"X-CodeEcho-Error": "budget_exceeded"},
         )
 
     ext = Path(file.filename or "audio.webm").suffix.lower()
@@ -344,8 +352,25 @@ async def score_attempt_route(
     session, question = _attempt_question(attempt_id, identity)
     try:
         scorecard = score_attempt(session, question, pseudocode=body.pseudocode)
+    except BudgetExceededError as exc:
+        raise HTTPException(
+            status_code=402,
+            detail=str(exc),
+            headers={"X-CodeEcho-Error": "budget_exceeded"},
+        )
     except ScoringUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"X-CodeEcho-Error": "scoring_unavailable"},
+        )
+    except Exception:
+        logger.exception("Scoring request failed for attempt %s", attempt_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Scoring is temporarily unavailable. Your transcript and delivery analysis are still available.",
+            headers={"X-CodeEcho-Error": "scoring_unavailable"},
+        )
     return store.save_scorecard(scorecard)
 
 
@@ -358,8 +383,18 @@ async def model_answer_route(
     _, question = _attempt_question(attempt_id, identity)
     try:
         return model_answer(question)
+    except BudgetExceededError as exc:
+        raise HTTPException(
+            status_code=402,
+            detail=str(exc),
+            headers={"X-CodeEcho-Error": "budget_exceeded"},
+        )
     except ScoringUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"X-CodeEcho-Error": "scoring_unavailable"},
+        )
 
 
 @router.get("/attempts/{attempt_id}/scorecard", response_model=Scorecard)

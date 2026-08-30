@@ -18,7 +18,15 @@ app = FastAPI(
 
 # Rate limiting (per client IP), protects against abuse and runaway LLM spend
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def _codeecho_rate_limit_handler(request, exc):
+    response = _rate_limit_exceeded_handler(request, exc)
+    response.headers["X-CodeEcho-Error"] = "rate_limited"
+    return response
+
+
+app.add_exception_handler(RateLimitExceeded, _codeecho_rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
@@ -33,6 +41,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-CodeEcho-Error"],
 )
 
 app.include_router(router, prefix="/api")

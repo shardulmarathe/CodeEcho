@@ -21,7 +21,7 @@ from app.services.behavioral import (
     get_technical_track,
     seniority_note,
 )
-from app.services.budget import check_budget, cost_of_call, record_cost
+from app.services.budget import BudgetExceededError, check_budget, cost_of_call, record_cost
 from app.services.llm_client import chat_completion, get_provider, is_configured
 
 # Offline/mock bank, organized by behavioral bucket so mock mode also carries a bucket
@@ -146,6 +146,7 @@ def _mock_question(
     bucket: Optional[str] = None,
     competency: Optional[str] = None,
     focus: Optional[str] = None,
+    fallback_reason: str = "llm_unavailable",
 ) -> Question:
     meta = {"role": role, "seniority": seniority}
     if topic:
@@ -188,7 +189,8 @@ def _mock_question(
         id=qid,
         qtype=qtype,
         prompt=prompt,
-        source="generated",
+        source="mock",
+        fallback_reason=fallback_reason,
         constraints=constraints,
         examples=examples,
         meta=meta,
@@ -313,14 +315,22 @@ def generate_question(
 
     if not is_configured():
         return _mock_question(
-            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus,
+            "llm_unavailable",
         )
     try:
         check_budget()
-    except Exception as exc:
+    except BudgetExceededError as exc:
         logger.warning("Question generation: budget refused (%s) - using mock bank", exc)
         return _mock_question(
-            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus,
+            "budget_exceeded",
+        )
+    except Exception as exc:
+        logger.warning("Question generation: budget check failed (%s) - using mock bank", exc)
+        return _mock_question(
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus,
+            "budget_check_failed",
         )
 
     topic_clause = f" focused on {topic}" if topic else ""
@@ -392,7 +402,8 @@ Respond ONLY with valid JSON:
         q_prompt = (data.get("prompt") or "").strip()
         if not q_prompt:
             return _mock_question(
-                qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
+                qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus,
+                "invalid_generation",
             )
         meta = {"role": role, "seniority": seniority}
         if data.get("topic"):
@@ -423,10 +434,16 @@ Respond ONLY with valid JSON:
             examples=examples,
             meta=meta,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Question generation failed - falling back to mock bank")
+        reason = (
+            "upstream_rate_limited"
+            if getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+            else "generation_failed"
+        )
         return _mock_question(
-            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus
+            qid, qtype, role, seniority, difficulty, topic, track, bucket, competency, focus,
+            reason,
         )
 
 
@@ -462,17 +479,24 @@ def _followup_lens(parent: Question) -> str:
     return "behavioral"
 
 
-def _mock_followup(parent: Question, prior_followups: list[str]) -> Optional[Question]:
+def _mock_followup(
+    parent: Question, prior_followups: list[str], fallback_reason: str
+) -> Optional[Question]:
     lens = _followup_lens(parent)
     bank = _FOLLOWUP_BANK[lens]
     # Walk the bank in order, skipping ones already asked; None when exhausted.
     for text in bank:
         if text not in prior_followups:
-            return _followup_question(parent, text)
+            return _followup_question(parent, text, "mock", fallback_reason)
     return None
 
 
-def _followup_question(parent: Question, prompt: str) -> Question:
+def _followup_question(
+    parent: Question,
+    prompt: str,
+    source: str = "generated",
+    fallback_reason: Optional[str] = None,
+) -> Question:
     """Build a follow-up Question that inherits the parent's rubric/meta."""
     meta = dict(parent.meta or {})
     meta["parent_question_id"] = parent.id
@@ -481,7 +505,8 @@ def _followup_question(parent: Question, prompt: str) -> Question:
         id=str(uuid.uuid4()),
         qtype=parent.qtype,
         prompt=prompt,
-        source="followup",
+        source=source,
+        fallback_reason=fallback_reason,
         meta=meta,
     )
 
@@ -503,11 +528,14 @@ def generate_followup(
     transcript = (transcript or "").strip()
 
     if not is_configured() or not transcript:
-        return _mock_followup(parent_question, prior_followups)
+        reason = "llm_unavailable" if not is_configured() else "no_transcript"
+        return _mock_followup(parent_question, prior_followups, reason)
     try:
         check_budget()
+    except BudgetExceededError:
+        return _mock_followup(parent_question, prior_followups, "budget_exceeded")
     except Exception:
-        return _mock_followup(parent_question, prior_followups)
+        return _mock_followup(parent_question, prior_followups, "budget_check_failed")
 
     lens = _followup_lens(parent_question)
     lens_guidance = {
@@ -548,8 +576,13 @@ Respond ONLY with valid JSON:
         if not follow:
             return None
         return _followup_question(parent_question, follow)
-    except Exception:
-        return None
+    except Exception as exc:
+        reason = (
+            "upstream_rate_limited"
+            if getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+            else "generation_failed"
+        )
+        return _mock_followup(parent_question, prior_followups, reason)
 
 
 def custom_question(qtype: str, prompt: str, meta: Optional[dict] = None) -> Question:
@@ -569,7 +602,7 @@ def custom_question(qtype: str, prompt: str, meta: Optional[dict] = None) -> Que
     if not is_configured():
         if fallback_qtype == "behavioral":
             meta.setdefault("bucket", "experience")
-        return Question(id=qid, qtype=fallback_qtype, prompt=prompt, source="user", meta=meta)
+        return Question(id=qid, qtype=fallback_qtype, prompt=prompt, source="pasted", meta=meta)
 
     bucket_opts = "|".join(BUCKET_KEYS)
     competency_opts = "|".join(EXPERIENCE_COMPETENCY_KEYS)
@@ -633,7 +666,7 @@ Respond ONLY with valid JSON:
         id=qid,
         qtype=resolved_qtype,
         prompt=prompt,
-        source="user",
+        source="pasted",
         constraints=constraints,
         examples=examples,
         meta=meta,

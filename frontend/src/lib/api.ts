@@ -19,6 +19,56 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
+export type ApiErrorCode =
+  | "budget_exceeded"
+  | "rate_limited"
+  | "scoring_unavailable"
+  | "server_unavailable"
+  | "request_failed";
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly code: ApiErrorCode,
+    public readonly status?: number,
+    public readonly detail?: string
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function displayMessage(code: ApiErrorCode, detail: string): string {
+  if (code === "budget_exceeded") {
+    return "The shared demo budget is used up for today—not your personal quota. Static mock-bank questions remain available, but paid analysis may be paused.";
+  }
+  if (code === "rate_limited") {
+    return "Too many requests reached the demo at once. Wait a minute, then try again.";
+  }
+  if (code === "scoring_unavailable") {
+    return "Scoring is temporarily unavailable. Your transcript and delivery analysis are still available.";
+  }
+  if (code === "server_unavailable") {
+    return "The free-tier server is still waking or unavailable. Wait a moment, then try again.";
+  }
+  return detail || "Something went wrong. Please try again.";
+}
+
+async function responseError(res: Response): Promise<ApiError> {
+  const body = await res.json().catch(() => ({ detail: res.statusText }));
+  const rawDetail = typeof body.detail === "string" ? body.detail : res.statusText;
+  const headerCode = res.headers.get("X-CodeEcho-Error");
+  const code: ApiErrorCode =
+    headerCode === "budget_exceeded" || res.status === 402
+      ? "budget_exceeded"
+      : headerCode === "rate_limited" || res.status === 429
+        ? "rate_limited"
+        : headerCode === "scoring_unavailable"
+          ? "scoring_unavailable"
+          : "request_failed";
+  return new ApiError(displayMessage(code, rawDetail), code, res.status, rawDetail);
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers);
   const token = await getAuthToken();
@@ -30,15 +80,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${API_URL}${path}`, { ...options, headers });
   } catch {
-    throw new Error(
-      API_URL
-        ? `Cannot reach the backend at ${API_URL}. Is the server running?`
-        : "Cannot reach the server. Please try again in a moment."
+    const detail = API_URL
+      ? `Cannot reach the backend at ${API_URL}. Is the server running?`
+      : "Cannot reach the server. Please try again in a moment.";
+    throw new ApiError(
+      displayMessage("server_unavailable", detail),
+      "server_unavailable",
+      undefined,
+      detail
     );
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Request failed: ${res.status}`);
+    throw await responseError(res);
   }
   return res.json();
 }
@@ -80,19 +133,23 @@ export async function claimGuestAttempts(): Promise<{ transferred: number }> {
   });
 }
 
-export async function getHealth() {
-  return request<{
-    status: string;
-    gemini_configured: boolean;
-    whisper_configured?: boolean;
-    transcription_configured?: boolean;
-    mock_mode: boolean;
-    transcription_provider: string;
-    llm_model?: string;
-    scoring_model?: string;
-    whisper_deployment?: string | null;
-    google_gemini_base_url?: string | null;
-  }>("/api/health");
+export interface HealthStatus {
+  status: string;
+  llm_status: "live" | "mock" | "degraded";
+  stt_status: "live" | "mock" | "degraded";
+  gemini_configured: boolean;
+  whisper_configured?: boolean;
+  transcription_configured?: boolean;
+  mock_mode: boolean;
+  transcription_provider: string;
+  llm_model?: string;
+  scoring_model?: string;
+  whisper_deployment?: string | null;
+  google_gemini_base_url?: string | null;
+}
+
+export async function getHealth(options?: RequestInit): Promise<HealthStatus> {
+  return request<HealthStatus>("/api/health", options);
 }
 
 export interface GeminiTestResult {
@@ -291,8 +348,7 @@ export async function streamAttempt(
     signal,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Request failed: ${res.status}`);
+    throw await responseError(res);
   }
   if (!res.body) throw new Error("No stream body");
   await readSse(res.body, onEvent, signal);

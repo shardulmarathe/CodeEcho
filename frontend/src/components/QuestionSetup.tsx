@@ -6,6 +6,7 @@ import { generateQuestion, getMe, submitQuestion } from "@/lib/api";
 import { CircleChoice } from "@/components/sketch/CircleChoice";
 import { SketchButton } from "@/components/sketch/SketchButton";
 import { SketchBox } from "@/components/sketch/Sketch";
+import { HonestyBanner } from "@/components/ReliabilityBanners";
 
 type QType = "behavioral" | "technical" | "custom";
 
@@ -154,7 +155,13 @@ export function QuestionSetup({
         {loading ? "Working…" : qtype === "custom" ? "Use this question" : "Generate a question"}
       </SketchButton>
 
-      {error && <p className="text-sm" style={{ color: "#f87171" }}>{error}</p>}
+      {error && (
+        <div className="w-full max-w-2xl">
+          <HonestyBanner title="Could not prepare a question" tone="error">
+            {error}
+          </HonestyBanner>
+        </div>
+      )}
     </div>
   );
 }

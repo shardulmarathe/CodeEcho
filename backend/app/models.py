@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SessionStatus(str, Enum):
@@ -146,12 +146,28 @@ class Question(BaseModel):
     id: str
     qtype: str  # "behavioral" | "technical"
     prompt: str
-    source: str = "generated"  # "generated" | "user" | "bank"
+    source: Literal["mock", "generated", "pasted"] = "generated"
+    fallback_reason: Optional[str] = None
     constraints: Optional[str] = None  # technical: input size, ranges, edge conditions
     examples: list[QuestionExample] = Field(default_factory=list)  # technical: worked I/O
     meta: dict = Field(default_factory=dict)  # role, seniority, difficulty, topic
     owner_user_id: Optional[str] = None
     created_at: Optional[str] = None
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source(cls, value: object) -> str:
+        """Keep legacy stored rows readable without ever overstating unknown provenance."""
+        source = str(value or "").strip().lower()
+        if source in {"generated", "pasted", "mock"}:
+            return source
+        if source == "user":
+            return "pasted"
+        if source == "bank":
+            return "mock"
+        # Old `followup` rows did not preserve whether they were live or bank-backed.
+        # Label them conservatively instead of claiming live generation.
+        return "mock"
 
 
 class GenerateQuestionRequest(BaseModel):

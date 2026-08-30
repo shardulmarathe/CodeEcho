@@ -149,6 +149,14 @@ async def run_analysis_pipeline(
                     "message": "Using browser live transcript — audio transcription failed.",
                 },
             )
+        elif transcript_source == "mock":
+            emit(
+                "transcript_source",
+                {
+                    "source": "mock",
+                    "message": "Demo transcription is using a sample transcript, not your recording.",
+                },
+            )
         else:
             emit("transcript_source", {"source": transcript_source})
 
@@ -258,7 +266,7 @@ async def run_analysis_pipeline(
         session.status = SessionStatus.FAILED
         session.error = str(e)
         update_session(session)
-        emit("error", {"error": str(e)})
+        emit("error", {"error": str(e), "code": "budget_exceeded"})
         store.persist_attempt_results(session)
     except AudioValidationError as e:
         # Safe, user-facing message (silent/too-short/too-quiet audio), surface it so
@@ -266,17 +274,25 @@ async def run_analysis_pipeline(
         session.status = SessionStatus.FAILED
         session.error = str(e)
         update_session(session)
-        emit("error", {"error": str(e)})
+        emit("error", {"error": str(e), "code": "audio_invalid"})
         store.persist_attempt_results(session)
     except Exception:
         # Log the full detail server-side; never return raw exception text to the
         # client (it can carry internal paths, request URLs, or credentials).
         logger.exception("Analysis pipeline failed for session %s", session.session_id)
-        generic = "Analysis failed. Please try again."
+        failed_during_stt = session.status == SessionStatus.TRANSCRIBING
+        generic = (
+            "Audio transcription failed. Please retry or use a supported audio file."
+            if failed_during_stt
+            else "Analysis failed. Please try again."
+        )
         session.status = SessionStatus.FAILED
         session.error = generic
         update_session(session)
-        emit("error", {"error": generic})
+        emit(
+            "error",
+            {"error": generic, "code": "stt_failed" if failed_during_stt else "analysis_failed"},
+        )
         store.persist_attempt_results(session)
 
     return session

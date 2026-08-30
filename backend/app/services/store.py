@@ -307,6 +307,7 @@ def create_question(
             meta = dict(question.meta)
             meta["_constraints"] = question.constraints
             meta["_examples"] = [e.model_dump() for e in question.examples]
+            meta["_fallback_reason"] = question.fallback_reason
             supabase_client.get_client().table("questions").insert(
                 {
                     "id": question.id,
@@ -343,11 +344,13 @@ def get_question(question_id: str) -> Optional[Question]:
         meta = dict(r.get("meta") or {})
         constraints = meta.pop("_constraints", None)
         examples = [QuestionExample(**e) for e in (meta.pop("_examples", []) or [])]
+        fallback_reason = meta.pop("_fallback_reason", None)
         return Question(
             id=r["id"],
             qtype=r["qtype"],
             prompt=r["prompt"],
             source=r.get("source", "generated"),
+            fallback_reason=fallback_reason,
             constraints=constraints,
             examples=examples,
             meta=meta,

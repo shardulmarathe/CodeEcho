@@ -31,7 +31,7 @@ create table if not exists questions (
     owner_user_id text,                       -- null for global/bank questions
     qtype text not null,                      -- 'behavioral' | 'technical'
     prompt text not null,
-    source text not null default 'generated', -- 'generated' | 'user' | 'bank'
+    source text not null default 'generated', -- 'mock' | 'generated' | 'pasted'
     meta jsonb default '{}',                  -- leetcode #, difficulty, topic, role
     created_at timestamptz default now()
 );

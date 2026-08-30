@@ -10,6 +10,7 @@ import type {
 import { CircleChoice } from "@/components/sketch/CircleChoice";
 import { SketchButton } from "@/components/sketch/SketchButton";
 import { SketchWaveform } from "@/components/sketch/SketchWaveform";
+import { HonestyBanner } from "@/components/ReliabilityBanners";
 
 const TYPES = [
   { v: "behavioral", title: "Behavioral", desc: "Experience, fit & learning" },
@@ -139,7 +140,13 @@ export function InterviewSetup({
         Start interview
       </SketchButton>
 
-      {error && <p className="text-sm" style={{ color: "#f87171" }}>{error}</p>}
+      {error && (
+        <div className="w-full max-w-2xl">
+          <HonestyBanner title="Could not start the interview" tone="error">
+            {error}
+          </HonestyBanner>
+        </div>
+      )}
     </div>
   );
 }

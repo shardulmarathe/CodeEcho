@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { getBudget, getHealth, getModelAnswer, scoreAttempt } from "@/lib/api";
-import type { BudgetStatus, ModelAnswer, Question, Scorecard } from "@/lib/types";
+import { useCallback, useRef, useState } from "react";
+import { getModelAnswer, scoreAttempt } from "@/lib/api";
+import type { ModelAnswer, Question, Scorecard } from "@/lib/types";
 import { recordingCapSec } from "@/lib/types";
 import { useAttemptAnalysis } from "@/lib/useAttemptAnalysis";
+import { useServiceReadiness } from "@/lib/useServiceReadiness";
 import { Nav } from "@/components/Nav";
 import { Waveform } from "@/components/Waveform";
 import { AudioRecorder, FileUpload } from "@/components/AudioInput";
@@ -20,6 +21,10 @@ import { Scratchpad } from "@/components/Scratchpad";
 import { AnswerScaffold } from "@/components/AnswerScaffold";
 import { ModelAnswerPanel } from "@/components/ModelAnswer";
 import { ScoringLoader } from "@/components/ScoringLoader";
+import {
+  ServiceStatusBanners,
+  TranscriptionStatusBanner,
+} from "@/components/ReliabilityBanners";
 
 type AppState = "setup" | "processing" | "results";
 
@@ -39,12 +44,12 @@ export default function Practice() {
     fillers,
     pauses,
     error,
+    errorCode,
   } = analysis;
+  const service = useServiceReadiness();
 
   const [appState, setAppState] = useState<AppState>("setup");
   const [inputMode, setInputMode] = useState<"record" | "upload">("record");
-  const [mockMode, setMockMode] = useState(false);
-  const [budget, setBudget] = useState<BudgetStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [question, setQuestion] = useState<Question | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
@@ -65,19 +70,14 @@ export default function Practice() {
   const questionRef = useRef<Question | null>(null);
   const scratchRef = useRef("");
 
-  const refreshBudget = useCallback(() => {
-    getBudget().then(setBudget).catch(() => {});
-  }, []);
+  const refreshBudget = service.refreshBudget;
+  const budget = service.budget;
+  const mockMode = service.health?.stt_status === "mock" || service.health?.mock_mode === true;
 
   const updateScratch = (v: string) => {
     scratchRef.current = v;
     setScratch(v);
   };
-
-  useEffect(() => {
-    getHealth().then((h) => setMockMode(h.mock_mode)).catch(() => {});
-    refreshBudget();
-  }, [refreshBudget]);
 
   const scoreCurrentAttempt = useCallback(
     async (attemptId: string) => {
@@ -216,19 +216,20 @@ export default function Practice() {
     <main className="min-h-dvh flex flex-col overflow-x-hidden">
       <Nav />
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 w-full flex-1 flex flex-col justify-center">
-        {appState === "setup" && budget?.budget_exceeded && (
-          <div className="panel p-5 text-center text-sm" style={{ color: "var(--amber)" }}>
-            LLM budget cap reached — practice is paused.
-          </div>
-        )}
+        <ServiceStatusBanners
+          wakeState={service.wakeState}
+          health={service.health}
+          budget={budget}
+          onRetry={service.retry}
+        />
 
         {/* Setup screen — pick type + level (circles); then a separate answer screen. */}
-        {appState === "setup" && !budget?.budget_exceeded && !question && (
+        {appState === "setup" && !question && (
           <QuestionSetup onReady={handleQuestionReady} disabled={loading} />
         )}
 
         {/* Answer screen — question + recorder, single centered column (no left rail). */}
-        {appState === "setup" && !budget?.budget_exceeded && question && (
+        {appState === "setup" && question && (
           <div className="max-w-4xl mx-auto w-full space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="eyebrow">
@@ -283,11 +284,7 @@ export default function Practice() {
               <h2 className="font-display text-lg font-semibold">Analyzing your answer…</h2>
             </div>
             <ProcessingSteps step={processingStep} mockMode={mockMode} statusMessage={statusMessage} />
-            {transcriptSource === "live" && (
-              <div className="panel p-4 text-sm text-center" style={{ color: "var(--amber)" }}>
-                Using the browser live transcript — audio transcription was unavailable.
-              </div>
-            )}
+            <TranscriptionStatusBanner source={transcriptSource} errorCode={errorCode} />
             {(words.length > 0 || transcriptText || processingStep === "transcribing") && (
               <TranscriptView
                 words={words}

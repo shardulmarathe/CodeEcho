@@ -1,6 +1,7 @@
 "use client";
 
 import type { Question } from "@/lib/types";
+import { QuestionSourceChrome } from "@/components/ReliabilityBanners";
 
 export function ProblemPanel({ question }: { question: Question }) {
   const isTech = question.qtype === "technical";
@@ -8,6 +9,7 @@ export function ProblemPanel({ question }: { question: Question }) {
     typeof question.meta?.focus === "string" ? question.meta.focus : null;
   return (
     <div className="panel p-5 space-y-4">
+      <QuestionSourceChrome question={question} />
       {focus && <p className="eyebrow">focus · {focus}</p>}
       <p className="font-medium text-base sm:text-lg leading-relaxed break-words">{question.prompt}</p>
 
