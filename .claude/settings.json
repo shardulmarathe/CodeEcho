@@ -1,0 +1,6 @@
+{
+  "$comment": "Plan mode is ON in this repo by default. Two-service deploy with its own Supabase schema; the frontend has no typecheck script so nothing catches type errors automatically.  Sessions start read-only; approve a plan to get write access. Set globally nowhere on purpose -- a gate you reflexively approve is worse than no gate, so it is only enabled where the blast radius justifies it.",
+  "permissions": {
+    "defaultMode": "plan"
+  }
+}
